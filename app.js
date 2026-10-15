@@ -1,21 +1,170 @@
-/* =====================================================================
-   MAPA TÁCTICO — Hotel / Extracción
-   · Gráficos 2.5D: muros con volumen, pisos con textura, mobiliario con sombra
-   · Niebla dinámica: se abre donde hay personajes y se cierra al salir
-   · Estados: activo · incapacitado · neutralizado · muerto
-   ===================================================================== */
+/* ============================================================================
+   ARCHITECTURAL GEOMETRY, WALKABLE ROOMS & INTERACTIVE DOORS (OPEN/CLOSE)
+   ============================================================================ */
 
-const STATUS = {
-  activo:       { label: 'Activo',       icon: '●', color: '#34d399', canMove: true,  canAct: true,  vision: true  },
-  incapacitado: { label: 'Incapacitado', icon: '!', color: '#f87171', canMove: false, canAct: false, vision: true  },
-  neutralizado: { label: 'Neutralizado', icon: 'z', color: '#a5b4c8', canMove: false, canAct: false, vision: false },
-  muerto:       { label: 'Muerto',       icon: '✖', color: '#94a3b8', canMove: false, canAct: false, vision: false }
+const FLOOR_ROOMS = {
+  'p4': [
+    { id: 'walkway_4p', name: 'Pasarela Ext. (14m)', floor: 'p4', x: 50, y: 290, w: 75, h: 210, isStairs: false },
+    { id: 'fire_door_4p', name: 'Escalera Proveedores (P4)', floor: 'p4', x: 125, y: 80, w: 110, h: 130, isStairs: true },
+    { id: 'room_402', name: 'Cuarto Servicio 402', floor: 'p4', x: 235, y: 80, w: 175, h: 130, isStairs: false },
+    { id: 'room_404', name: 'Habitación 404', floor: 'p4', x: 410, y: 80, w: 145, h: 130, isStairs: false },
+    { id: 'room_406', name: 'Habitación 406', floor: 'p4', x: 555, y: 80, w: 145, h: 130, isStairs: false },
+    { id: 'elevators_4p', name: 'Elevadores (Bloqueados)', floor: 'p4', x: 700, y: 80, w: 160, h: 130, isStairs: false },
+    { id: 'corridor_4p', name: 'Pasillo 4to Piso', floor: 'p4', x: 125, y: 210, w: 735, h: 95, isStairs: false },
+    { id: 'room_408', name: 'Habitación 408', floor: 'p4', x: 125, y: 305, w: 245, h: 195, isStairs: false },
+    { id: 'room_410', name: 'Habitación 410', floor: 'p4', x: 370, y: 305, w: 225, h: 195, isStairs: false },
+    { id: 'room_412', name: 'Habitación 412', floor: 'p4', x: 595, y: 305, w: 265, h: 195, isStairs: false }
+  ],
+  'p2': [
+    { id: 'stairs_p4_p3', name: 'Escalera Tramo P4→P3', floor: 'p2', x: 125, y: 85, w: 235, h: 390, isStairs: true },
+    { id: 'stairs_p2', name: 'Descanso Piso 2', floor: 'p2', x: 360, y: 85, w: 250, h: 390, isStairs: false },
+    { id: 'stairs_p1', name: 'Escalera Salida a P1/PB', floor: 'p2', x: 610, y: 85, w: 240, h: 390, isStairs: true }
+  ],
+  'pb': [
+    { id: 'stairs_exit_pb', name: 'Escalera Proveedores (PB)', floor: 'pb', x: 70, y: 85, w: 120, h: 195, isStairs: true },
+    { id: 'dock_pb', name: 'Muelle de Carga', floor: 'pb', x: 190, y: 85, w: 230, h: 195, isStairs: false },
+    { id: 'lobby_pb', name: 'Lobby Principal (Colapsado)', floor: 'pb', x: 70, y: 280, w: 350, h: 215, isStairs: false },
+    { id: 'yard_pb', name: 'Patio de Maniobras (15m)', floor: 'pb', x: 420, y: 85, w: 220, h: 195, isStairs: false },
+    { id: 'pickup_pb', name: 'Cajón Pickup Lázaras', floor: 'pb', x: 640, y: 85, w: 220, h: 195, isStairs: false },
+    { id: 'gate_pb', name: 'Caseta de Salida Vial', floor: 'pb', x: 420, y: 280, w: 440, h: 215, isStairs: false }
+  ]
+};
+
+// Interactive Doors: Each portal has an `id`, `isOpen` state, `orient` ('h' or 'v'), and 3D leaf geometry
+const FLOOR_PORTALS = {
+  'p4': [
+    { id: 'door_408', x: 220, y: 292, w: 52, h: 26, a: 'room_408', b: 'corridor_4p', label: 'Puerta 408', orient: 'h', isOpen: false, swing: 'M 224 305 L 224 342 A 37 37 0 0 0 261 305' },
+    { id: 'win_408', x: 112, y: 365, w: 26, h: 55, a: 'room_408', b: 'walkway_4p', label: 'Ventana Pasarela', orient: 'v', isOpen: false, swing: '' },
+    { id: 'door_402', x: 285, y: 197, w: 50, h: 26, a: 'room_402', b: 'corridor_4p', label: 'Puerta Servicio 402', orient: 'h', isOpen: false, swing: 'M 290 210 L 290 175 A 35 35 0 0 1 325 210' },
+    { id: 'door_fire_p4', x: 155, y: 197, w: 50, h: 26, a: 'fire_door_4p', b: 'corridor_4p', label: 'Puerta Cortafuegos', orient: 'h', isOpen: false, swing: 'M 160 210 L 160 175 A 35 35 0 0 1 195 210' },
+    { id: 'door_402_stairs', x: 222, y: 125, w: 26, h: 48, a: 'room_402', b: 'fire_door_4p', label: 'Acceso Mantenimiento', orient: 'v', isOpen: false, swing: 'M 235 128 L 203 128 A 32 32 0 0 0 235 160' },
+    { id: 'door_410', x: 455, y: 292, w: 48, h: 26, a: 'room_410', b: 'corridor_4p', label: 'Puerta 410', orient: 'h', isOpen: false, swing: 'M 460 305 L 460 338 A 33 33 0 0 0 493 305' },
+    { id: 'door_412', x: 675, y: 292, w: 50, h: 26, a: 'room_412', b: 'corridor_4p', label: 'Puerta 412 (Baleada)', orient: 'h', isOpen: true, swing: 'M 680 305 L 680 340 A 35 35 0 0 0 715 305' },
+    { id: 'door_404', x: 460, y: 197, w: 46, h: 26, a: 'room_404', b: 'corridor_4p', label: 'Puerta 404', orient: 'h', isOpen: false, swing: 'M 465 210 L 465 178 A 32 32 0 0 1 497 210' },
+    { id: 'door_406', x: 605, y: 197, w: 46, h: 26, a: 'room_406', b: 'corridor_4p', label: 'Puerta 406', orient: 'h', isOpen: false, swing: 'M 610 210 L 610 178 A 32 32 0 0 1 642 210' }
+  ],
+  'p2': [
+    { id: 'pass_p3_p2', x: 345, y: 215, w: 30, h: 90, a: 'stairs_p4_p3', b: 'stairs_p2', label: 'Paso Rellano P2', orient: 'v', isOpen: true, swing: '' },
+    { id: 'pass_p2_p1', x: 595, y: 215, w: 30, h: 90, a: 'stairs_p2', b: 'stairs_p1', label: 'Bajada a P1', orient: 'v', isOpen: true, swing: '' }
+  ],
+  'pb': [
+    { id: 'door_stairs_pb', x: 175, y: 150, w: 30, h: 65, a: 'stairs_exit_pb', b: 'dock_pb', label: 'Puerta Escalera PB', orient: 'v', isOpen: false, swing: 'M 190 155 L 226 155 A 36 36 0 0 1 190 191' },
+    { id: 'door_dock_yard', x: 405, y: 125, w: 30, h: 135, a: 'dock_pb', b: 'yard_pb', label: 'Puerta Peatonal / Cortina', orient: 'v', isOpen: false, swing: 'M 420 245 L 454 245 A 34 34 0 0 0 420 211' },
+    { id: 'pass_yard_pickup', x: 625, y: 115, w: 30, h: 145, a: 'yard_pb', b: 'pickup_pb', label: 'Tramo 15m Asfalto', orient: 'v', isOpen: true, swing: '' },
+    { id: 'pass_pickup_gate', x: 695, y: 265, w: 95, h: 30, a: 'pickup_pb', b: 'gate_pb', label: 'Carril de Escape', orient: 'h', isOpen: true, swing: '' },
+    { id: 'pass_yard_gate', x: 490, y: 265, w: 80, h: 30, a: 'yard_pb', b: 'gate_pb', label: 'Paso Patio Sur', orient: 'h', isOpen: true, swing: '' }
+  ]
+};
+
+const ROOM_DETAILS = {
+  'room_408': {
+    title: 'Habitación 408 — Refugio Inicial (Piso 4)',
+    desc: 'Suite con duela de madera 3D, baño cerámico, cama King y escritorio de caoba bloqueando la puerta norte.',
+    secret: 'Fase 1: Abre la Puerta 408 (tocando su ícono 🔒 en el mapa o el botón de abajo) para salir al pasillo alfombrado.',
+    actions: [
+      { label: 'Desmontar barricada, abrir Puerta 408 y salir', dif: 8, mod: 6, openDoorId: 'door_408', targetRoom: 'corridor_4p', tx: 245, ty: 260, ok: 'Barricada retirada en silencio; Puerta 408 abierta y cruza al pasillo.', fail: 'El escritorio rechina (+1 Ruido), pero logran abrir la Puerta 408.', failNoise: 1 }
+    ]
+  },
+  'corridor_4p': {
+    title: 'Pasillo Central Alfombrado (Piso 4)',
+    desc: 'Corredor con alfombra tejida en relieve que comunica todas las suites con el Cuarto de Servicio 402 y la Escalera.',
+    secret: 'Frente a la puerta 410 yace en letargo el infectado de la 412. Abre la Puerta 402 o la Puerta Cortafuegos para avanzar.',
+    actions: [
+      { label: 'Avanzar en sigilo y abrir Cuarto 402', dif: 10, mod: 6, openDoorId: 'door_402', targetRoom: 'room_402', tx: 310, ty: 155, ok: 'Avance silencioso; Puerta 402 abierta.', fail: '¡Tropiezo en la alfombra! (+1 Ruido y queda rezagado).', failNoise: 1, tripOnFail: true },
+      { label: 'Neutralización CQC silenciosa en el pasillo', dif: 9, mod: 7, targetRoom: 'corridor_4p', tx: 390, ty: 255, ok: 'Amenaza del pasillo neutralizada con cuchillo D2 sin ruido.', fail: 'Forcejeo en el suelo (+1 Ruido).', failNoise: 1, tripOnFail: true }
+    ]
+  },
+  'room_402': {
+    title: 'Cuarto de Servicio 402 (Piso 4)',
+    desc: 'Bodega de camaristas con piso de cemento pulido, estanterías metálicas 3D, tarja y cesto industrial de blancos.',
+    secret: 'Botín: Tarjeta Maestra, barra de uña, cloro y guantes. Peligro oculto en el cesto de ropa sucia (Percepción DIF 10).',
+    actions: [
+      { label: 'Inspeccionar cesto, tomar Tarjeta y abrir paso a Escalera', dif: 10, mod: 6, loot: true, openDoorId: 'door_402_stairs', targetRoom: 'room_402', tx: 295, ty: 140, ok: 'Emboscada detectada, Tarjeta Maestra asegurada y puerta a Escalera abierta.', fail: 'Susto en el cesto (+1 Ruido), pero aseguran la Tarjeta Maestra.', failNoise: 1 }
+    ]
+  },
+  'fire_door_4p': {
+    title: 'Cubo de Escalera de Proveedores (Acceso Piso 4)',
+    desc: 'Tiro vertical de concreto armado con barandal tubular. Los personajes aquí son visibles al cambiar a Pisos 3–2.',
+    secret: 'Conecta el Piso 4 con los Pisos 3–2 y la Planta Baja evitando el Lobby.',
+    actions: [
+      { label: '▼ Bajar con este personaje a Pisos 3–2 (Escalera)', dif: 0, mod: 0, changeFloorTo: 'p2', targetRoom: 'stairs_p4_p3', tx: 235, ty: 250, ok: 'El personaje desciende por el cubo de concreto hacia los Pisos 3–2.' }
+    ]
+  },
+  'walkway_4p': { title: 'Pasarela Exterior de Mantenimiento (+14m)', desc: 'Rejilla metálica suspendida sobre el vacío.', secret: 'Ruta nocturna descartada por riesgo de caída.', actions: [] },
+  'room_410': { title: 'Habitación 410 (Piso 4)', desc: 'Suite ejecutiva intermedia.', secret: 'Frente a su entrada descansaba el objetivo de la 412.', actions: [] },
+  'room_412': { title: 'Habitación 412 — Escena del Contrato Roto', desc: 'Muebles volcados, impactos balísticos y 18 casquillos 9mm en el piso.', secret: 'La puerta de la 412 quedó abierta tras el tiroteo inicial.', actions: [] },
+  'room_404': { title: 'Habitación 404 (Piso 4)', desc: 'Suite ejecutiva norte.', secret: 'Puerta cerrada.', actions: [] },
+  'room_406': { title: 'Habitación 406 (Piso 4)', desc: 'Suite ejecutiva norte.', secret: 'Puerta cerrada.', actions: [] },
+  'elevators_4p': { title: 'Núcleo de Elevadores (Clausurado)', desc: 'Foso de ascensores conectado al Lobby.', secret: 'Evitado por protocolo táctico.', actions: [] },
+
+  'stairs_p4_p3': {
+    title: 'Escalera de Proveedores — Tramo Superior (P4 → P3)',
+    desc: 'Rampa de peldaños de concreto con eco acústico cerrado.',
+    secret: 'Arrastra tus figuras hacia la derecha para entrar al Descanso del Piso 2.',
+    actions: [
+      { label: 'Avanzar en descenso asistido al Descanso Piso 2', dif: 8, mod: 6, targetRoom: 'stairs_p2', tx: 470, ty: 260, ok: 'Descenso silencioso hasta el rellano del Piso 2.', fail: 'Resbalón en el escalón (+1 Ruido).', failNoise: 1, tripOnFail: true },
+      { label: '▲ Subir de regreso al Piso 4', dif: 0, mod: 0, changeFloorTo: 'p4', targetRoom: 'fire_door_4p', tx: 180, ty: 150, ok: 'El personaje regresa a la puerta cortafuegos del Piso 4.' }
+    ]
+  },
+  'stairs_p2': {
+    title: 'Descanso del Piso 2 — Encuentro Crítico',
+    desc: 'Plataforma intermedia obstruida por un carrito de lavandería volcado.',
+    secret: 'Dos errantes en el rellano. Opción A: 2 tiros silenciados (DIF 11). Opción B: Salto de barandal hacia la salida P1 (DIF 14).',
+    actions: [
+      { label: 'Opción A: 2 Disparos Silenciados Glock 17 (DIF 11)', dif: 11, mod: 6, ammo: 2, targetRoom: 'stairs_p1', tx: 720, ty: 260, ok: 'Dos impactos limpios al cráneo; avanzan al tramo final P1.', fail: 'Un tiro roza el carrito (+1 Ruido).', failNoise: 1 },
+      { label: 'Opción B: Saltar barandal hacia el tramo P1 (DIF 14)', dif: 14, mod: 4, targetRoom: 'stairs_p1', tx: 720, ty: 260, ok: 'Salto atlético exitoso al tramo inferior.', fail: 'Mal aterrizaje (+1 Ruido y tropiezo).', failNoise: 1, tripOnFail: true }
+    ]
+  },
+  'stairs_p1': {
+    title: 'Escalera Tramo Inferior (P1 → Salida a Planta Baja)',
+    desc: 'Base del cubo vertical con puerta metálica hacia el Muelle de Descarga.',
+    secret: 'Los personajes aquí son visibles al cambiar a la pestaña Planta Baja.',
+    actions: [
+      { label: '▼ Salir al Muelle de Carga en Planta Baja', dif: 0, mod: 0, changeFloorTo: 'pb', targetRoom: 'stairs_exit_pb', tx: 130, ty: 185, ok: 'El personaje desemboca en el acceso de Planta Baja.' }
+    ]
+  },
+
+  'stairs_exit_pb': {
+    title: 'Acceso de Escalera en Planta Baja',
+    desc: 'Vestíbulo de concreto que desemboca en el Muelle de Descarga.',
+    secret: 'Abre la Puerta Escalera PB para ingresar al Muelle de Carga.',
+    actions: [
+      { label: '▲ Subir de regreso a Pisos 3–2 (Escalera)', dif: 0, mod: 0, changeFloorTo: 'p2', targetRoom: 'stairs_p1', tx: 720, ty: 260, ok: 'El personaje vuelve al tramo inferior de la escalera.' }
+    ]
+  },
+  'dock_pb': {
+    title: 'Muelle de Descarga Trasero (Planta Baja)',
+    desc: 'Plataforma logística con tarimas de madera 3D, cortina metálica enrollable y puerta peatonal.',
+    secret: 'Puerta peatonal lateral: 0 Ruido con Tarjeta Maestra. Cortina metálica: +2 Ruido y 60 segundos límite.',
+    actions: [
+      { label: 'Abrir Puerta Peatonal con Tarjeta Maestra y salir', dif: 8, mod: 6, needCard: true, openDoorId: 'door_dock_yard', targetRoom: 'yard_pb', tx: 520, ty: 185, ok: 'Puerta abierta sin ruido; salen al Patio de Maniobras.', fail: 'Rechinido leve (+1 Ruido).', failNoise: 1 },
+      { label: 'Levantar Cortina de Acero Manual (+2 Ruido)', dif: 9, mod: 4, forceNoise: 2, openDoorId: 'door_dock_yard', targetRoom: 'yard_pb', tx: 520, ty: 185, ok: 'Cortina abierta (+2 Ruido). ¡60s para cruzar el patio!', fail: 'Estruendo metálico (+2 Ruido).', failNoise: 2 }
+    ]
+  },
+  'yard_pb': {
+    title: 'Patio de Maniobras Exterior (15 Metros)',
+    desc: 'Explanada de asfalto en relieve bajo el sol de 38°C con jardineras perimetrales.',
+    secret: 'Dos civiles infectados merodean entre el andén y la Pickup.',
+    actions: [
+      { label: 'Cruzar los 15m hasta el Cajón de la Pickup', dif: 11, mod: 6, ammo: 2, targetRoom: 'pickup_pb', tx: 745, ty: 185, ok: 'Amenazas abatidas; alcanzan la Pickup.', fail: 'Tropiezo en el asfalto (+1 Ruido).', failNoise: 1, tripOnFail: true }
+    ]
+  },
+  'pickup_pb': {
+    title: 'Cajón de Estacionamiento — Camioneta Pickup',
+    desc: 'Pickup doble cabina 3D estacionada a 15 metros del muelle (3/4 tanque de gasolina, batería óptima).',
+    secret: 'Objetivo primario de extracción. Llaves en posesión de Audomaro.',
+    actions: [
+      { label: 'Arrancar Pickup y salir por la Caseta Vial', dif: 10, mod: 6, targetRoom: 'gate_pb', tx: 745, ty: 390, ok: '¡MISIÓN 1 COMPLETADA! La Pickup rebasa la caseta y sale a la avenida.', fail: 'Roce contra el auto colisionado (+1 Ruido), pero logran salir.', failNoise: 1 }
+    ]
+  },
+  'gate_pb': { title: 'Caseta de Salida y Vehículo Colisionado', desc: 'Garita de vigilancia con pluma rota y sedán estrellado.', secret: 'Salida hacia el Periférico Norte de Mérida.', actions: [] },
+  'lobby_pb': { title: 'Lobby Principal del Hotel (Zona Roja Clausurada)', desc: 'Vestíbulo de mármol con cristales rotos y recepción devastada.', secret: 'Aislado del muelle por muro estructural.', actions: [] }
 };
 
 const STATE = {
-  view: window.innerWidth <= 768 ? 'p4' : 'all',
-  gmMode: false,            // "Ver todo": quita la niebla completa
-  peek: {},                 // salas exploradas manualmente (se borran con el botón Niebla)
+  currentFloor: 'p4',
+  fogActive: true,
+  isoView: false,
   noise: 0,
   zoom: 1,
   selectedRoom: 'room_408',
@@ -23,665 +172,394 @@ const STATE = {
   drawerMinimized: false,
   lootMasterCard: false,
   dragState: null,
-  lastTrail: { tokenId: 'AU', x1: 185, y1: 390, x2: 205, y2: 278, distMeters: '4.1m' },
   tokens: {
-    'AU': { id: 'AU', name: 'Audomaro', role: 'Líder Táctico',     color: '#10b981', hp: 18, maxHp: 18, ammo: 18, reserve: 16, weapon: 'Glock 17 Supresor', x: 205, y: 278, status: 'activo' },
-    'AR': { id: 'AR', name: 'Armando',  role: 'Operador / Ganzúa', color: '#38bdf8', hp: 16, maxHp: 16, ammo: 30, reserve: 30, weapon: 'Subfusil MP9',      x: 222, y: 395, status: 'activo' },
-    'GZ': { id: 'GZ', name: 'Gonzalo',  role: 'Civil (Herido)',    color: '#f59e0b', hp: 12, maxHp: 14, ammo: 0,  reserve: 0,  weapon: 'Croquis del Hotel', x: 155, y: 425, status: 'activo' }
+    'AU': { id: 'AU', name: 'Audomaro', color: '#10b981', hp: 18, maxHp: 18, ammo: 18, reserve: 16, floor: 'p4', roomId: 'room_408', roomName: 'Habitación 408', x: 225, y: 372, angle: -90, tripped: false, inStairs: false },
+    'AR': { id: 'AR', name: 'Armando', color: '#38bdf8', hp: 16, maxHp: 16, ammo: 30, reserve: 30, floor: 'p4', roomId: 'room_408', roomName: 'Habitación 408', x: 295, y: 395, angle: -110, tripped: false, inStairs: false },
+    'GZ': { id: 'GZ', name: 'Gonzalo', color: '#f59e0b', hp: 12, maxHp: 14, ammo: 0, reserve: 0, floor: 'p4', roomId: 'room_408', roomName: 'Habitación 408', x: 255, y: 448, angle: -85, tripped: false, inStairs: false }
   },
-  enemies: {
-    'Z1': { id: 'Z1', name: 'Amenaza 412',        x: 335,  y: 295, status: 'activo' },
-    'Z2': { id: 'Z2', name: 'Amenaza Rellano A',  x: 628,  y: 310, status: 'activo' },
-    'Z3': { id: 'Z3', name: 'Amenaza Rellano B',  x: 645,  y: 332, status: 'activo' },
-    'Z4': { id: 'Z4', name: 'Amenaza Patio A',    x: 1105, y: 240, status: 'activo' },
-    'Z5': { id: 'Z5', name: 'Amenaza Patio B',    x: 1148, y: 222, status: 'activo' }
-  },
-  lastRollHtml: '<span style="color:#94a3b8;">💡 <strong>Táctil y Responsivo:</strong> Arrastra cada ficha (<strong>AU</strong>, <strong>AR</strong>, <strong>GZ</strong>) con el dedo o mouse, o pellizca con 2 dedos para hacer zoom. La niebla se abre sola donde haya personajes.</span>'
+  lastRollHtml: '<span style="color:#94a3b8;">💡 <strong>Puertas Interactivas y Figuras 3D:</strong> Toca cualquier puerta (<strong>🔒/🔓</strong>) para abrirla o cerrarla. Una puerta cerrada bloquea el paso.</span>'
 };
 
-/* ---------------------------------------------------------------------
-   GEOMETRÍA
-   kind: (vacío) interior con muros · 'out' exterior con borde · 'walk' pasarela · 'shaft' cubo de escalera
-   decor: sala sin ficha de juego (solo ambiente)
-   --------------------------------------------------------------------- */
-const ROOM_BOUNDS = [
-  { id: 'walkway_4p',   name: 'Pasarela Ext.',    x: 38,   y: 320, w: 52,  h: 185, floor: 'grate', kind: 'walk' },
-  { id: 'fire_door_4p', name: 'Cortafuegos P4',   x: 94,   y: 106, w: 56,  h: 125, floor: 'conc' },
-  { id: 'room_402',     name: 'Cuarto 402',       x: 150,  y: 106, w: 115, h: 125, floor: 'tile' },
-  { id: 'room_404',     name: 'Hab. 404',         x: 265,  y: 106, w: 90,  h: 125, floor: 'wood',  decor: true },
-  { id: 'room_406',     name: 'Hab. 406',         x: 355,  y: 106, w: 90,  h: 125, floor: 'wood',  decor: true },
-  { id: 'elev_4p',      name: 'Elevadores',       x: 445,  y: 106, w: 76,  h: 125, floor: 'haz',   decor: true },
-  { id: 'corridor_4p',  name: 'Pasillo 4to Piso', x: 94,   y: 231, w: 427, h: 90,  floor: 'carpet' },
-  { id: 'room_408',     name: 'Habitación 408',   x: 94,   y: 321, w: 165, h: 182, floor: 'wood' },
-  { id: 'room_410',     name: 'Hab. 410',         x: 259,  y: 321, w: 115, h: 182, floor: 'wood',  decor: true },
-  { id: 'room_412',     name: 'Habitación 412',   x: 374,  y: 321, w: 147, h: 182, floor: 'wood' },
-  { id: 'stairs_p4_p3', name: 'Escalera P4→P3',   x: 563,  y: 110, w: 189, h: 120, floor: 'conc', kind: 'shaft' },
-  { id: 'stairs_p2',    name: 'Descanso Piso 2',  x: 563,  y: 238, w: 189, h: 135, floor: 'conc', kind: 'shaft' },
-  { id: 'stairs_p1',    name: 'Base Escalera P1', x: 563,  y: 381, w: 189, h: 118, floor: 'conc', kind: 'shaft' },
-  { id: 'dock_pb',      name: 'Muelle de Carga',  x: 810,  y: 108, w: 215, h: 195, floor: 'conc' },
-  { id: 'lobby_pb',     name: 'Lobby Principal',  x: 810,  y: 308, w: 265, h: 194, floor: 'marble' },
-  { id: 'yard_pb',      name: 'Patio (15m)',      x: 1030, y: 108, w: 180, h: 195, floor: 'asph', kind: 'out' },
-  { id: 'pickup_pb',    name: 'Cajón Pickup',     x: 1212, y: 108, w: 162, h: 195, floor: 'asph', kind: 'out' },
-  { id: 'gate_pb',      name: 'Caseta Salida',    x: 1080, y: 308, w: 294, h: 194, floor: 'asph', kind: 'out' }
-];
+/* ============================================================================
+   DOOR OPEN / CLOSE CONTROLLER & REAL COLLISION ENGINE
+   ============================================================================ */
 
-// Puertas, ventanas y pasos abiertos. h:1 = muro horizontal (y=c), h:0 = muro vertical (x=c). a..b = hueco.
-const DOORS = [
-  { h: 1, c: 231, a: 195, b: 220, dir: -1, col: '#f59e0b' },   // 402
-  { h: 1, c: 231, a: 108, b: 134, dir: -1, col: '#38bdf8' },   // cortafuegos
-  { h: 1, c: 231, a: 296, b: 320, dir: -1, col: '#64748b' },   // 404
-  { h: 1, c: 231, a: 386, b: 410, dir: -1, col: '#64748b' },   // 406
-  { h: 1, c: 231, a: 470, b: 496, dir: -1, col: '#ef4444' },   // elevadores
-  { h: 1, c: 321, a: 174, b: 201, dir: 1,  col: '#10b981' },   // 408
-  { h: 1, c: 321, a: 318, b: 342, dir: 1,  col: '#64748b' },   // 410
-  { h: 1, c: 321, a: 432, b: 457, dir: 1,  col: '#ef4444' },   // 412
-  { h: 0, c: 94,  a: 445, b: 475, dir: 1,  col: '#94a3b8' },   // 408 → pasarela
-  { h: 1, c: 503, a: 135, b: 220, t: 'win' },                  // ventana 408
-  { h: 0, c: 760, a: 432, b: 478, dir: -1, col: '#10b981' },   // cubo → exterior
-  { h: 0, c: 810, a: 205, b: 235, dir: 1,  col: '#38bdf8' },   // servicio → muelle
-  { h: 0, c: 1025, a: 130, b: 225, t: 'curtain' },             // cortina del muelle
-  { h: 0, c: 1025, a: 248, b: 275, dir: 1, col: '#10b981' },   // puerta peatonal
-  { h: 0, c: 1210, a: 135, b: 260, t: 'open' },                // patio ↔ pickup
-  { h: 1, c: 305, a: 1270, b: 1320, t: 'open' },               // pickup → caseta
-  { h: 1, c: 502, a: 850, b: 1040, t: 'win' }                  // ventanal del lobby
-];
-
-const ROOMS = {
-  'room_408': {
-    id: 'room_408', floor: 'p4',
-    title: 'Habitación 408 — Punto de Partida (Barricada)',
-    tokenSpot: { x: 190, y: 405 },
-    desc: 'Habitación asegurada en el 4to piso con escritorio de madera maciza contra la puerta, cama doble, baño interior y ventana hacia el norte.',
-    secret: 'Fase 1: Desmontar en silencio el escritorio y las toallas de la puerta para salir al pasillo alfombrado.',
-    actions: [
-      { label: 'Desmontar barricada y salir al pasillo', dif: 8, mod: 6, next: 'corridor_4p', ok: 'Barricada retirada sin ruido. El personaje activo sale al corredor.', fail: 'El escritorio raspa el piso (+1 Ruido).', failNoise: 1 }
-    ]
-  },
-  'corridor_4p': {
-    id: 'corridor_4p', floor: 'p4',
-    title: 'Pasillo Central 4to Piso (Alfombrado)',
-    tokenSpot: { x: 205, y: 278 },
-    desc: 'Corredor longitudinal con alfombra amortiguadora que conecta las habitaciones 402 a 414 y el bloque de elevadores.',
-    secret: 'Frente a la puerta 410 yace en letargo el infectado de la 412. Si alguien tropieza (Fallo), queda incapacitado en el pasillo mientras los demás pueden posicionarse por separado.',
-    actions: [
-      { label: 'Avanzar en sigilo por la alfombra hacia la 402', dif: 10, mod: 6, next: 'room_402', ok: 'Avance sigiloso exitoso hasta la puerta 402.', fail: '¡Tropiezo en la alfombra! El personaje activo queda incapacitado y genera +1 Ruido.', failNoise: 1, tripOnFail: true },
-      { label: 'Neutralización CQC silenciosa en el pasillo', dif: 9, mod: 7, next: 'corridor_4p', neutralize: ['Z1'], ok: 'Amenaza neutralizada en silencio total sin gastar munición.', fail: 'Forcejeo en el suelo (+1 Ruido); el personaje queda incapacitado en su posición.', failNoise: 1, tripOnFail: true }
-    ]
-  },
-  'room_412': {
-    id: 'room_412', floor: 'p4',
-    title: 'Habitación 412 — Zona de Impactos',
-    tokenSpot: { x: 430, y: 405 },
-    desc: 'Suite ejecutiva con marcas de impactos balísticos en la entrada y mobiliario derribado.',
-    secret: '18 casquillos 9mm percutidos en el umbral. Sin recursos adicionales útiles para la ruta de extracción.',
-    actions: []
-  },
-  'walkway_4p': {
-    id: 'walkway_4p', floor: 'p4',
-    title: 'Pasarela Exterior de Mantenimiento (Altura: 14m)',
-    tokenSpot: { x: 65, y: 395 },
-    desc: 'Andador metálico volado en la fachada lateral a 14 metros sobre el nivel de calle.',
-    secret: 'Ruta nocturna descartada por riesgo crítico de caída.',
-    actions: []
-  },
-  'room_402': {
-    id: 'room_402', floor: 'p4',
-    title: 'Habitación 402 — Cuarto de Servicio y Camaristas',
-    tokenSpot: { x: 195, y: 165 },
-    desc: 'Cuarto técnico con estanterías de blancos, carros de limpieza, productos químicos y cesto industrial de lavandería.',
-    secret: 'Botín: Tarjeta Maestra magnética, barra de uña (Daño 3), 2 botellas de cloro y guantes. Peligro oculto en el cesto de ropa sucia (Percepción DIF 10).',
-    actions: [
-      { label: 'Forzar cerradura con ganzúa (Personaje activo)', dif: 9, mod: 4, next: 'room_402', loot: true, ok: 'Cerradura abierta en 10 segundos sin ruido.', fail: 'La ganzúa se dobla; se fuerza con palanca (+1 Ruido).', failNoise: 1 },
-      { label: 'Inspeccionar cesto y asegurar Tarjeta Maestra', dif: 10, mod: 6, next: 'fire_door_4p', loot: true, ok: 'Peligro en el cesto detectado a tiempo. Tarjeta Maestra y herramientas aseguradas.', fail: 'Emboscada desde el cesto (+1 Ruido); el personaje queda incapacitado.', failNoise: 1, tripOnFail: true }
-    ]
-  },
-  'fire_door_4p': {
-    id: 'fire_door_4p', floor: 'p4',
-    title: 'Puerta Cortafuegos — Acceso al Cubo de Escaleras',
-    tokenSpot: { x: 120, y: 165 },
-    desc: 'Puerta metálica pesada con barra antipánico que comunica el ala izquierda del 4to piso con el cubo vertical de servicio.',
-    secret: 'Ruta limpia que evita por completo los elevadores y el vestíbulo principal.',
-    actions: [
-      { label: 'Cruzar puerta cortafuegos hacia Escalera P4–P3', dif: 0, mod: 0, next: 'stairs_p4_p3', switchFloorOnMobile: 'stairs', ok: 'El personaje activo cruza hacia el cubo de concreto de la escalera.' }
-    ]
-  },
-  'stairs_p4_p3': {
-    id: 'stairs_p4_p3', floor: 'stairs',
-    title: 'Cubo de Escalera — Tramo Superior (Piso 4 a Piso 3)',
-    tokenSpot: { x: 650, y: 175 },
-    desc: 'Rampa de escalones estrechos de concreto armado con barandal tubular metálico y acústica cerrada.',
-    secret: 'Descenso asistido a ritmo controlado para evitar resbalones y eco en el cubo vertical.',
-    actions: [
-      { label: 'Descender hacia el rellano del Piso 2', dif: 8, mod: 6, next: 'stairs_p2', ok: 'Descenso silencioso escalón por escalón hasta el rellano del Piso 2.', fail: '¡Tropezón en los escalones de concreto! (+1 Ruido y queda incapacitado).', failNoise: 1, tripOnFail: true }
-    ]
-  },
-  'stairs_p2': {
-    id: 'stairs_p2', floor: 'stairs',
-    title: 'Descanso del Piso 2 — Rellano Intermedio',
-    tokenSpot: { x: 650, y: 315 },
-    desc: 'Plataforma intermedia donde la puerta del 2do piso se encuentra trabada por un carrito de lavandería.',
-    secret: 'Dos amenazas bloquean el rellano junto al carrito. Opción A: 2 disparos con supresor (DIF 11). Opción B: Descolgarse por el barandal hacia el Piso 1 (DIF 14).',
-    actions: [
-      { label: 'Opción A: Doble disparo silenciado (2 balas 9mm)', dif: 11, mod: 6, ammo: 2, next: 'stairs_p1', kill: ['Z2', 'Z3'], ok: 'Dos blancos abatidos en silencio. Paso libre hacia Planta Baja.', fail: 'Un proyectil impacta el metal del carrito (+1 Ruido).', failNoise: 1 },
-      { label: 'Opción B: Saltar barandal hacia el tramo del Piso 1', dif: 14, mod: 4, next: 'stairs_p1', ok: 'Maniobra atlética exitosa hacia el nivel inferior.', fail: 'Mal aterrizaje en el descanso (+1 Ruido y queda incapacitado).', failNoise: 1, tripOnFail: true }
-    ]
-  },
-  'stairs_p1': {
-    id: 'stairs_p1', floor: 'stairs',
-    title: 'Tramo Inferior Piso 1 — Salida a Muelle de Carga',
-    tokenSpot: { x: 650, y: 445 },
-    desc: 'Base del cubo de escaleras con puerta de servicio directo hacia el muelle trasero.',
-    secret: 'Conecta directamente con la Planta Baja sin pisar el Lobby.',
-    actions: [
-      { label: 'Entrar al Muelle de Carga en Planta Baja', dif: 0, mod: 0, next: 'dock_pb', switchFloorOnMobile: 'pb', ok: 'El personaje activo accede a la plataforma del Muelle de Descarga.' }
-    ]
-  },
-  'dock_pb': {
-    id: 'dock_pb', floor: 'pb',
-    title: 'Muelle de Descarga Trasero (Planta Baja)',
-    tokenSpot: { x: 920, y: 205 },
-    desc: 'Andén de concreto para proveedores con cortina metálica enrollable (asegurada con cadena y candado) y puerta peatonal lateral.',
-    secret: 'Levantar la cortina metálica suma +2 de Ruido y da 60s. La puerta peatonal lateral es 100% silenciosa si ya tienes la Tarjeta Maestra de la 402.',
-    actions: [
-      { label: 'Abrir puerta peatonal lateral con Tarjeta Maestra', dif: 8, mod: 6, needCard: true, next: 'yard_pb', ok: 'Puerta lateral desbloqueada sin emitir ruido (+0 Ruido).', fail: 'Bisagra oxidada rechina levemente (+1 Ruido).', failNoise: 1 },
-      { label: 'Romper candado y alzar cortina metálica (+2 Ruido)', dif: 9, mod: 4, forceNoise: 2, next: 'yard_pb', ok: 'Cortina abierta (+2 Ruido). Tienen 60 segundos para cruzar los 15m.', fail: 'Golpe metálico fuerte al abrir (+2 Ruido).', failNoise: 2 }
-    ]
-  },
-  'yard_pb': {
-    id: 'yard_pb', floor: 'pb',
-    title: 'Patio de Maniobras Exterior (Tramo de 15 Metros)',
-    tokenSpot: { x: 1125, y: 205 },
-    desc: 'Explanada pavimentada de maniobras a cielo abierto entre el andén de descarga y los cajones de estacionamiento.',
-    secret: 'Dos amenazas merodean entre el andén y el vehículo estacionado a 15 metros.',
-    actions: [
-      { label: 'Cruzar los 15 metros tácticamente hasta el vehículo', dif: 11, mod: 6, ammo: 2, next: 'pickup_pb', kill: ['Z4', 'Z5'], ok: 'Corredor de 15m despejado; aborda el vehículo.', fail: 'Tropiezo o contacto hostil a mitad del asfalto (+1 Ruido). El personaje queda incapacitado.', failNoise: 1, tripOnFail: true }
-    ]
-  },
-  'pickup_pb': {
-    id: 'pickup_pb', floor: 'pb',
-    title: 'Cajón de Estacionamiento — Camioneta Pickup',
-    tokenSpot: { x: 1275, y: 195 },
-    desc: 'Vehículo tipo Pickup estacionado en batería a 15 metros del muelle, orientado hacia el carril de salida.',
-    secret: 'Batería óptima y 3/4 de tanque de combustible. Llaves en posesión del líder.',
-    actions: [
-      { label: 'Encender motor y maniobrar hacia la Caseta de Salida', dif: 10, mod: 6, next: 'gate_pb', ok: '¡Extracción completada! La pickup esquiva el auto estrellado y sale a la avenida.', fail: 'Roce de lámina en la caseta (+1 Ruido), pero logran salir.', failNoise: 1 }
-    ]
-  },
-  'gate_pb': {
-    id: 'gate_pb', floor: 'pb',
-    title: 'Caseta de Control y Rampa Vehicular',
-    tokenSpot: { x: 1275, y: 390 },
-    desc: 'Garita de vigilancia en el acceso del patio con pluma rota y un automóvil civil impactado contra el bolardo.',
-    secret: 'Punto final de extracción hacia las vialidades exteriores.',
-    actions: []
-  },
-  'lobby_pb': {
-    id: 'lobby_pb', floor: 'pb',
-    title: 'Lobby Principal y Recepción (Zona Clausurada)',
-    tokenSpot: { x: 940, y: 420 },
-    desc: 'Vestíbulo de doble altura con mostrador de recepción, puertas de cristal destrozadas y acceso a elevadores.',
-    secret: 'Zona roja de alta letalidad evitada mediante el descenso por el cubo de servicio.',
-    actions: []
-  }
-};
-
-/* =====================================================================
-   LÓGICA: salas, visión y estados
-   ===================================================================== */
-function detectRoomAt(x, y) {
-  for (const b of ROOM_BOUNDS) {
-    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b;
-  }
-  return null;
-}
-
-const roomLabel = o => { const r = detectRoomAt(o.x, o.y); return r ? r.name : 'En tránsito'; };
-const canAct = o => !!STATUS[o.status]?.canAct;
-const canMove = o => !!STATUS[o.status]?.canMove;
-
-// Salas sin niebla: donde hay personajes con visión, las exploradas a mano, o todas con "Ver todo".
-function visibleRoomIds() {
-  const set = new Set();
-  if (STATE.gmMode) { ROOM_BOUNDS.forEach(b => set.add(b.id)); return set; }
-  Object.values(STATE.tokens).forEach(t => {
-    if (!STATUS[t.status].vision) return;
-    const r = detectRoomAt(t.x, t.y);
-    if (r) set.add(r.id);
-  });
-  Object.keys(STATE.peek).forEach(id => set.add(id));
-  return set;
-}
-const isRoomVisible = id => visibleRoomIds().has(id);
-
-function firstActiveId() {
-  const t = Object.values(STATE.tokens).find(canAct);
-  return t ? t.id : null;
-}
-
-function setStatus(kind, id, status) {
-  const o = kind === 'enemy' ? STATE.enemies[id] : STATE.tokens[id];
-  if (!o || !STATUS[status] || o.status === status) return;
-  const prev = o.status;
-  o.status = status;
-  if (kind === 'token') {
-    if (status === 'muerto') o.hp = 0;
-    else if (prev === 'muerto' && o.hp === 0) o.hp = 1;
-    if (STATE.activeToken === id && !canAct(o)) STATE.activeToken = firstActiveId() || id;
-  }
-  const s = STATUS[status];
-  const nm = o.name + (kind === 'token' ? ` [${o.id}]` : '');
-  STATE.lastRollHtml = `<span style="color:${s.color};">${s.icon} <strong>${nm}</strong> ahora está <strong>${s.label.toLowerCase()}</strong>.</span>`;
+function toggleDoorById(floor, doorId, evt) {
+  if (evt) evt.stopPropagation();
+  const portals = FLOOR_PORTALS[floor] || [];
+  const p = portals.find(d => d.id === doorId);
+  if (!p) return;
+  p.isOpen = !p.isOpen;
+  STATE.lastRollHtml = p.isOpen
+    ? `<span style="color:#34d399;">🔓 <strong>${p.label}</strong> ABIERTA. Ahora puedes arrastrar a los personajes a través del umbral.</span>`
+    : `<span style="color:#f87171;">🔒 <strong>${p.label}</strong> CERRADA. El paso a través de esta puerta ha quedado bloqueado.</span>`;
   renderAll();
 }
 
-function applyEnemyStates(ids, status) {
-  (ids || []).forEach(id => { if (STATE.enemies[id]) STATE.enemies[id].status = status; });
+function getRoomById(floor, roomId) {
+  const list = FLOOR_ROOMS[floor] || [];
+  return list.find(r => r.id === roomId) || null;
 }
 
-/* =====================================================================
-   ESTILOS (se inyectan desde aquí: no hay que tocar tu CSS)
-   ===================================================================== */
-function injectStyles() {
-  if (document.getElementById('mapa-extra-css')) return;
-  const css = `
-  .lbl{paint-order:stroke;stroke:#050b14;stroke-width:3px;stroke-linejoin:round;font-family:monospace;pointer-events:none}
-  .room-hit{fill:transparent;cursor:pointer}
-  .room-hit:hover{fill:rgba(125,211,252,.07)}
-  .fog-cloud{transition:opacity .75s ease;cursor:pointer}
-  .fog-cloud.fog-off{opacity:0;pointer-events:none}
-  .fog-cloud .mist{animation:mistDrift 7s ease-in-out infinite alternate}
-  @keyframes mistDrift{from{opacity:.35}to{opacity:.8}}
-  .sel-glow{fill:none;stroke:#fcd34d;stroke-width:3;stroke-dasharray:10 6;animation:selMarch 1.2s linear infinite;pointer-events:none;filter:drop-shadow(0 0 6px rgba(252,211,77,.7))}
-  @keyframes selMarch{to{stroke-dashoffset:-32}}
-  .incap-ring{animation:incapPulse 1.1s ease-in-out infinite}
-  @keyframes incapPulse{0%,100%{opacity:.35}50%{opacity:1}}
-  .tok-muerto .token-body,.tok-neutralizado .token-body{opacity:.62}
-  .status-select{font:inherit;font-size:10px;font-weight:700;padding:2px 4px;border-radius:5px;background:#0b1220;color:#e2e8f0;border:1px solid rgba(148,163,184,.4);cursor:pointer;max-width:112px}
-  .status-select.s-activo{color:#34d399;border-color:#34d399}
-  .status-select.s-incapacitado{color:#f87171;border-color:#f87171}
-  .status-select.s-neutralizado{color:#a5b4c8;border-color:#a5b4c8}
-  .status-select.s-muerto{color:#94a3b8;border-color:#64748b;text-decoration:line-through}
-  .enemy-list{margin-top:6px;padding:6px 8px;background:rgba(239,68,68,.08);border-left:3px solid #ef4444;border-radius:4px;font-size:11px;color:#fecaca}
-  .enemy-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0}
-  `;
-  const st = document.createElement('style');
-  st.id = 'mapa-extra-css';
-  st.textContent = css;
-  document.head.appendChild(st);
+function pointInRect(x, y, r, pad = 12) {
+  return x >= r.x + pad && x <= r.x + r.w - pad && y >= r.y + pad && y <= r.y + r.h - pad;
 }
 
-/* =====================================================================
-   ARTE 2.5D DEL MAPA (capa estática: se construye una sola vez)
-   ===================================================================== */
-const FLOOR_FILL = { wood: 'pWood', carpet: 'pCarpet', tile: 'pTile', conc: 'pConc', asph: 'pAsph', marble: 'pMarble', grate: 'pGrate', haz: 'pHaz' };
-
-const SVG_DEFS = `<defs>
-  <pattern id="pGridF" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="#0f1a2b" stroke-width=".7"/></pattern>
-  <pattern id="pGridM" width="100" height="100" patternUnits="userSpaceOnUse"><rect width="100" height="100" fill="url(#pGridF)"/><path d="M100 0H0V100" fill="none" stroke="#15233a" stroke-width="1.2"/></pattern>
-  <pattern id="pWood" width="40" height="28" patternUnits="userSpaceOnUse"><rect width="40" height="28" fill="#1e2c33"/><path d="M0 0H40M0 14H40M13 0V14M29 14V28" stroke="#2b3c47" stroke-width="1"/><path d="M4 7H10M20 21H27" stroke="#243642" stroke-width="1"/></pattern>
-  <pattern id="pCarpet" width="12" height="12" patternUnits="userSpaceOnUse"><rect width="12" height="12" fill="#19243b"/><path d="M0 6H12M6 0V12" stroke="#1e2c49" stroke-width="1"/><circle cx="6" cy="6" r="1" fill="#2a3d60"/></pattern>
-  <pattern id="pTile" width="14" height="14" patternUnits="userSpaceOnUse"><rect width="14" height="14" fill="#18323b"/><path d="M0 0H14V14" fill="none" stroke="#0f2530" stroke-width="1"/></pattern>
-  <pattern id="pConc" width="36" height="36" patternUnits="userSpaceOnUse"><rect width="36" height="36" fill="#19232f"/><circle cx="6" cy="9" r="1" fill="#243244"/><circle cx="24" cy="5" r="1.2" fill="#202e3f"/><circle cx="14" cy="27" r="1" fill="#27364b"/><circle cx="31" cy="22" r="1.1" fill="#1f2d3d"/></pattern>
-  <pattern id="pAsph" width="30" height="30" patternUnits="userSpaceOnUse"><rect width="30" height="30" fill="#131b27"/><circle cx="5" cy="7" r=".9" fill="#222d3d"/><circle cx="19" cy="14" r="1" fill="#1d2838"/><circle cx="11" cy="24" r=".8" fill="#26334a"/><circle cx="26" cy="26" r="1" fill="#1b2535"/></pattern>
-  <pattern id="pMarble" width="40" height="40" patternUnits="userSpaceOnUse"><rect width="40" height="40" fill="#1b2433"/><rect width="20" height="20" fill="#232e40"/><rect x="20" y="20" width="20" height="20" fill="#232e40"/><path d="M4 30L16 36M24 6L36 12" stroke="#2e3b51" stroke-width=".8"/></pattern>
-  <pattern id="pGrate" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#0d1522"/><path d="M0 4H8" stroke="#2b3b52" stroke-width="1.6"/></pattern>
-  <pattern id="pHaz" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="14" height="14" fill="#1a1119"/><rect width="7" height="14" fill="rgba(239,68,68,.2)"/></pattern>
-  <pattern id="pSteps" width="12" height="9" patternUnits="userSpaceOnUse"><rect width="12" height="9" fill="#1c2738"/><rect width="12" height="2.5" fill="#42536e"/><rect y="2.5" width="12" height="1" fill="#0a111d"/></pattern>
-  <pattern id="pMist" width="70" height="70" patternUnits="userSpaceOnUse"><circle cx="14" cy="18" r="16" fill="#9fb4d6" opacity=".10"/><circle cx="48" cy="40" r="21" fill="#9fb4d6" opacity=".08"/><circle cx="26" cy="58" r="13" fill="#9fb4d6" opacity=".09"/></pattern>
-  <radialGradient id="gVig" cx=".5" cy=".5" r=".78"><stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></radialGradient>
-  <radialGradient id="gFog" cx=".5" cy=".5" r=".75"><stop offset="0" stop-color="#1b2740"/><stop offset="1" stop-color="#090e18"/></radialGradient>
-  <filter id="fWall" x="-4%" y="-4%" width="108%" height="108%"><feDropShadow dx="2" dy="5" stdDeviation="3" flood-color="#000" flood-opacity=".65"/></filter>
-  <filter id="tokenShadow" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity=".85"/></filter>
-</defs>`;
-
-// Hueco de puertas sobre una línea de muro
-function edgeSegs(isH, c, a, b) {
-  const gaps = DOORS.filter(d => !!d.h === !!isH && Math.abs(d.c - c) <= 6 && d.b > a && d.a < b).sort((p, q) => p.a - q.a);
-  const segs = [];
-  let cur = a;
-  gaps.forEach(g => { if (g.a > cur) segs.push([cur, g.a]); cur = Math.max(cur, g.b); });
-  if (cur < b) segs.push([cur, b]);
-  return segs;
+function pointInPortal(x, y, p) {
+  return x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h;
 }
 
-// Muro con volumen: cara lateral oscura (extrusión) + cara superior + filo de luz
-function wallLine(x1, y1, x2, y2, t) {
-  const hz = y1 === y2;
-  const hl = hz
-    ? `<line x1="${x1}" y1="${y1 - t / 2 + .8}" x2="${x2}" y2="${y2 - t / 2 + .8}" stroke="#eef4fb" stroke-opacity=".75" stroke-width="1.1"/>`
-    : `<line x1="${x1 - t / 2 + .8}" y1="${y1}" x2="${x2 - t / 2 + .8}" y2="${y2}" stroke="#eef4fb" stroke-opacity=".75" stroke-width="1.1"/>`;
-  return `<line x1="${x1 + 2}" y1="${y1 + 4}" x2="${x2 + 2}" y2="${y2 + 4}" stroke="#0b1424" stroke-width="${t}" stroke-linecap="square"/>` +
-         `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#9fb0c6" stroke-width="${t}" stroke-linecap="square"/>` + hl;
-}
+function evaluateWalkableStep(floor, currentRoomId, x, y) {
+  const rooms = FLOOR_ROOMS[floor] || [];
+  const portals = FLOOR_PORTALS[floor] || [];
+  const curRoom = rooms.find(r => r.id === currentRoomId);
 
-function wallsFor(x, y, w, h, t) {
-  const s = [];
-  edgeSegs(1, y, x, x + w).forEach(([p, q]) => s.push([p, y, q, y]));
-  edgeSegs(1, y + h, x, x + w).forEach(([p, q]) => s.push([p, y + h, q, y + h]));
-  edgeSegs(0, x, y, y + h).forEach(([p, q]) => s.push([x, p, x, q]));
-  edgeSegs(0, x + w, y, y + h).forEach(([p, q]) => s.push([x + w, p, x + w, q]));
-  return s.map(a => wallLine(...a, t)).join('');
-}
-
-function curbsFor(b) {
-  const s = [];
-  edgeSegs(1, b.y, b.x, b.x + b.w).forEach(([p, q]) => s.push([p, b.y, q, b.y]));
-  edgeSegs(1, b.y + b.h, b.x, b.x + b.w).forEach(([p, q]) => s.push([p, b.y + b.h, q, b.y + b.h]));
-  edgeSegs(0, b.x, b.y, b.y + b.h).forEach(([p, q]) => s.push([b.x, p, b.x, q]));
-  edgeSegs(0, b.x + b.w, b.y, b.y + b.h).forEach(([p, q]) => s.push([b.x + b.w, p, b.x + b.w, q]));
-  return s.map(([x1, y1, x2, y2]) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#6b7c94" stroke-width="2.2" stroke-dasharray="7 4"/>`).join('');
-}
-
-function doorArt(d) {
-  const w = d.b - d.a;
-  if (d.t === 'open') return '';
-  if (d.t === 'win') {
-    return d.h
-      ? `<line x1="${d.a}" y1="${d.c}" x2="${d.b}" y2="${d.c}" stroke="#7dd3fc" stroke-width="4.5" stroke-opacity=".85"/><line x1="${d.a}" y1="${d.c - 1}" x2="${d.b}" y2="${d.c - 1}" stroke="#e0f2fe" stroke-width="1"/>`
-      : `<line x1="${d.c}" y1="${d.a}" x2="${d.c}" y2="${d.b}" stroke="#7dd3fc" stroke-width="4.5" stroke-opacity=".85"/>`;
+  if (curRoom && pointInRect(x, y, curRoom, 11)) {
+    return { allowed: true, newRoomId: curRoom.id, blockedByClosedDoor: null };
   }
-  if (d.t === 'curtain') {
-    return `<line x1="${d.c}" y1="${d.a}" x2="${d.c}" y2="${d.b}" stroke="#7f1d1d" stroke-width="8" stroke-linecap="square"/>` +
-           `<line x1="${d.c}" y1="${d.a}" x2="${d.c}" y2="${d.b}" stroke="#ef4444" stroke-width="5" stroke-dasharray="4 3"/>`;
+
+  for (const p of portals) {
+    if (p.a === currentRoomId || p.b === currentRoomId) {
+      const otherId = p.a === currentRoomId ? p.b : p.a;
+      const otherRoom = rooms.find(r => r.id === otherId);
+      const px = p.x + p.w / 2;
+      const py = p.y + p.h / 2;
+      const nearPortal = pointInPortal(x, y, p) || (otherRoom && pointInRect(x, y, otherRoom, 11) && Math.hypot(x - px, y - py) <= Math.max(p.w, p.h) + 28);
+
+      if (nearPortal) {
+        // Check if the door is OPEN! If closed, block movement and report which door blocked it!
+        if (!p.isOpen) {
+          return { allowed: false, newRoomId: currentRoomId, blockedByClosedDoor: p.label };
+        }
+        if (otherRoom && pointInRect(x, y, otherRoom, 4)) {
+          return { allowed: true, newRoomId: otherRoom.id, blockedByClosedDoor: null };
+        }
+        return { allowed: true, newRoomId: currentRoomId, blockedByClosedDoor: null };
+      }
+    }
   }
-  const s = d.dir || 1;
-  if (d.h) {
-    return `<path d="M ${d.a} ${d.c} L ${d.a} ${d.c + s * w} A ${w} ${w} 0 0 ${s > 0 ? 0 : 1} ${d.b} ${d.c}" fill="${d.col}" fill-opacity=".08" stroke="${d.col}" stroke-width="1.2" stroke-dasharray="3 2"/>` +
-           `<line x1="${d.a}" y1="${d.c}" x2="${d.a}" y2="${d.c + s * w}" stroke="${d.col}" stroke-width="3.2" stroke-linecap="round"/>`;
+
+  return { allowed: false, newRoomId: currentRoomId, blockedByClosedDoor: null };
+}
+
+function moveTokenWithCollision(token, targetX, targetY) {
+  const floor = STATE.currentFloor;
+  let cx = token.x;
+  let cy = token.y;
+  let cRoom = token.roomId;
+
+  const dx = targetX - cx;
+  const dy = targetY - cy;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 0.5) return { hitWall: false, closedDoorName: null };
+
+  token.angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+  const steps = Math.min(60, Math.ceil(dist / 3));
+  const stepX = dx / steps;
+  const stepY = dy / steps;
+  let hitWall = false;
+  let closedDoorName = null;
+
+  for (let i = 1; i <= steps; i++) {
+    const nx = cx + stepX;
+    const ny = cy + stepY;
+    const check = evaluateWalkableStep(floor, cRoom, nx, ny);
+    if (check.allowed) {
+      cx = nx;
+      cy = ny;
+      cRoom = check.newRoomId;
+    } else {
+      if (check.blockedByClosedDoor) closedDoorName = check.blockedByClosedDoor;
+      const checkX = evaluateWalkableStep(floor, cRoom, cx + stepX, cy);
+      if (checkX.allowed) {
+        cx += stepX;
+        cRoom = checkX.newRoomId;
+      } else {
+        if (checkX.blockedByClosedDoor) closedDoorName = checkX.blockedByClosedDoor;
+        const checkY = evaluateWalkableStep(floor, cRoom, cx, cy + stepY);
+        if (checkY.allowed) {
+          cy += stepY;
+          cRoom = checkY.newRoomId;
+        } else {
+          if (checkY.blockedByClosedDoor) closedDoorName = checkY.blockedByClosedDoor;
+          hitWall = true;
+          break;
+        }
+      }
+    }
   }
-  return `<path d="M ${d.c} ${d.a} L ${d.c + s * w} ${d.a} A ${w} ${w} 0 0 ${s > 0 ? 1 : 0} ${d.c} ${d.b}" fill="${d.col}" fill-opacity=".08" stroke="${d.col}" stroke-width="1.2" stroke-dasharray="3 2"/>` +
-         `<line x1="${d.c}" y1="${d.a}" x2="${d.c + s * w}" y2="${d.a}" stroke="${d.col}" stroke-width="3.2" stroke-linecap="round"/>`;
+
+  token.x = cx;
+  token.y = cy;
+  token.roomId = cRoom;
+  token.floor = floor;
+  const roomObj = getRoomById(floor, cRoom);
+  if (roomObj) {
+    token.roomName = roomObj.name;
+    token.inStairs = !!roomObj.isStairs;
+  }
+  return { hitWall, closedDoorName };
 }
 
-// Bloque con volumen (mobiliario): cara lateral + cara superior + brillo
-const blk = (x, y, w, h, top, side, d = 4, rx = 3, extra = '') =>
-  `<g ${extra}><rect x="${x}" y="${y + d}" width="${w}" height="${h}" rx="${rx}" fill="${side}"/><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${top}"/><rect x="${x + 1.5}" y="${y + 1.2}" width="${w - 3}" height="2" rx="1" fill="#fff" opacity=".14"/></g>`;
-const bed = (x, y, w, h, col) => blk(x, y, w, h, col, '#08141c', 5, 4) +
-  `<rect x="${x + 4}" y="${y + 5}" width="14" height="${h / 2 - 7}" rx="3" fill="#dbeafe" opacity=".9"/><rect x="${x + 4}" y="${y + h / 2 + 2}" width="14" height="${h / 2 - 7}" rx="3" fill="#dbeafe" opacity=".9"/><path d="M${x + 24} ${y + 4}V${y + h - 4}M${x + 38} ${y + 4}V${y + h - 4}" stroke="#fff" stroke-opacity=".12"/>`;
-const toilet = (x, y) => `<rect x="${x - 6}" y="${y - 14}" width="12" height="6" rx="2" fill="#cbd5e1"/><ellipse cx="${x}" cy="${y}" rx="7" ry="9.5" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1"/><ellipse cx="${x}" cy="${y + 1}" rx="4" ry="6" fill="#94a3b8" opacity=".5"/>`;
-const sink = (x, y) => `<rect x="${x}" y="${y}" width="18" height="24" rx="3" fill="#cbd5e1" stroke="#94a3b8"/><ellipse cx="${x + 9}" cy="${y + 12}" rx="5.5" ry="8" fill="#64748b" opacity=".6"/>`;
-const lamp = (x, y) => `<circle cx="${x}" cy="${y}" r="28" fill="#fde68a" opacity=".05"/><circle cx="${x}" cy="${y}" r="3" fill="#fde68a" opacity=".75"/>`;
-const T = (x, y, size, txt, fill, extra = '') => `<text class="lbl" x="${x}" y="${y}" font-size="${size}" fill="${fill}" ${extra.includes('text-anchor') ? '' : 'text-anchor="middle"'} ${extra}>${txt}</text>`;
-const flight = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#pSteps)" stroke="#55677f" stroke-width="1.5"/><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#gVig)" opacity=".7"/>`;
-const chevrons = (x, y, col) => [0, 9, 18].map(i => `<path d="M${x - 7} ${y + i}l7 6l7 -6" fill="none" stroke="${col}" stroke-width="1.6" opacity="${1 - i / 40}"/>`).join('');
+/* ============================================================================
+   FLOOR VISIBILITY & DYNAMIC PRESENCE-BASED LIGHTING/FOG
+   ============================================================================ */
 
-function buildStaticArt() {
-  const floors = ROOM_BOUNDS.map(b =>
-    `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="url(#${FLOOR_FILL[b.floor]})"/>` +
-    `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="url(#gVig)"/>`).join('');
-
-  const slabs = `
-    <rect x="84" y="96" width="447" height="417" rx="5" fill="#070d17" stroke="#1b2a42" stroke-width="2"/>
-    <rect x="549" y="96" width="217" height="417" rx="5" fill="#070d17" stroke="#1b2a42" stroke-width="2"/>
-    <rect x="800" y="96" width="585" height="417" rx="6" fill="#0a111b" stroke="#1b2a42" stroke-width="2"/>
-    <path d="M766 205H810V235H766ZM766 432H772V478H766Z" fill="none"/>
-    <path d="M760 432 L790 432 L790 330 L800 300 L800 205 L810 205 L810 235 L796 235 L796 300 L780 330 L780 478 L760 478 Z" fill="#141d2b" opacity=".95"/>`;
-
-  // Muros: edificio P4, cubo de escalera y salas interiores
-  const inner = ROOM_BOUNDS.filter(b => !b.kind);
-  const walls = wallsFor(90, 102, 435, 405, 8) + wallsFor(555, 102, 205, 405, 8) + inner.map(b => wallsFor(b.x, b.y, b.w, b.h, 5)).join('') +
-    // baño de la 408 y baños de 410 / 412
-    wallLine(94, 389, 152, 389, 4) + wallLine(152, 321, 152, 389, 4) +
-    wallLine(259, 376, 304, 376, 4) + wallLine(304, 321, 304, 376, 4) +
-    wallLine(374, 376, 420, 376, 4) + wallLine(420, 321, 420, 376, 4);
-  const curbs = ROOM_BOUNDS.filter(b => b.kind === 'out').map(curbsFor).join('') +
-    `<rect x="805" y="102" width="575" height="405" rx="4" fill="none" stroke="#64748b" stroke-width="2.5" stroke-dasharray="2 5"/>`;
-  const doors = DOORS.map(doorArt).join('');
-
-  /* ---------- NIVEL 4 ---------- */
-  const p4 = `
-    ${T(45, 72, 13, 'PLANTA ARQUITECTÓNICA — NIVEL 4 (ALA NORTE)', '#38bdf8', 'font-weight="bold" text-anchor="start"')}
-    ${T(45, 88, 9.5, 'COTA +14.00m • MUROS DE CONCRETO Y TABLARROCA • ARRASTRE TÁCTIL ACTIVO', '#64748b', 'text-anchor="start"')}
-    <!-- Pasarela exterior -->
-    <line x1="40" y1="322" x2="40" y2="503" stroke="#94a3b8" stroke-width="2.5"/><line x1="88" y1="322" x2="88" y2="503" stroke="#94a3b8" stroke-width="2.5"/>
-    ${[345, 375, 405, 435, 465, 495].map(y => `<line x1="40" y1="${y}" x2="88" y2="${y}" stroke="#334155" stroke-width="1.2"/>`).join('')}
-    <rect x="30" y="320" width="10" height="185" fill="url(#gVig)" opacity=".9"/>
-    <text class="lbl" x="64" y="405" font-size="9" fill="#94a3b8" text-anchor="middle" transform="rotate(-90 64 405)">PASARELA EXT. (+14m)</text>
-    <!-- Cortafuegos -->
-    ${flight(102, 116, 40, 55)}
-    ${T(122, 192, 8.5, 'PUERTA', '#38bdf8', 'font-weight="bold"')}${T(122, 203, 8, 'CORTAFUEGOS', '#38bdf8')}
-    <!-- 402: servicio -->
-    ${blk(156, 112, 65, 14, '#2a3a52', '#0c1522', 4, 2)}${T(188, 122, 7.5, 'ESTANTERÍA', '#aab8cc')}
-    ${blk(156, 145, 28, 45, '#3a2e18', '#120d05', 5, 2, '')}<rect x="159" y="148" width="22" height="39" rx="2" fill="none" stroke="#f59e0b" stroke-width="1.2"/>${T(170, 172, 9, '💳🔧', '#fcd34d')}
-    <circle cx="242" cy="136" r="15" fill="#0b1018"/><circle cx="242" cy="133" r="14" fill="#2b2418" stroke="#8b6b34" stroke-width="2.2"/><circle cx="242" cy="133" r="9" fill="#17110a" stroke="#5a4521"/>${T(242, 136, 6.5, 'CESTO', '#d7c9a6')}
-    ${T(208, 218, 10, 'CUARTO 402', '#fcd34d', 'font-weight="bold"')}
-    <!-- 404 / 406 -->
-    ${bed(285, 114, 48, 36, '#1c3340')}${T(310, 196, 9.5, 'HAB. 404', '#5b6b82')}
-    ${bed(375, 114, 48, 36, '#1c3340')}${T(400, 196, 9.5, 'HAB. 406', '#5b6b82')}
-    <!-- Elevadores -->
-    <rect x="452" y="116" width="28" height="46" rx="2" fill="#2a3446" stroke="#64748b"/><rect x="486" y="116" width="28" height="46" rx="2" fill="#2a3446" stroke="#64748b"/>
-    <path d="M452 116L480 162M480 116L452 162M486 116L514 162M514 116L486 162" stroke="#7f1d1d" stroke-width="1.2"/>
-    ${T(483, 184, 8.5, 'ELEVADORES', '#f87171', 'font-weight="bold"')}${T(483, 195, 7.5, '(BLOQUEADOS)', '#fca5a5')}
-    <!-- Pasillo -->
-    <rect x="110" y="262" width="395" height="30" rx="4" fill="#26407a" opacity=".32"/><rect x="110" y="262" width="395" height="30" rx="4" fill="none" stroke="#3b5fa8" stroke-width="1" opacity=".45"/>
-    ${[150, 250, 350, 450].map(x => lamp(x, 276)).join('')}
-    ${T(275, 248, 9, 'PASILLO CENTRAL ALFOMBRADO — PISO 4', '#7488a6')}
-    <!-- 408 -->
-    ${toilet(112, 349)}${sink(130, 326)}${T(123, 382, 7, 'BAÑO', '#7aa0aa')}
-    ${bed(104, 410, 68, 54, '#1b5662')}${T(142, 478, 7.5, 'CAMA', '#6ee7b7')}
-    ${blk(172, 323, 46, 14, '#8a5a2b', '#2a1807', 4, 2)}${T(195, 333, 7, 'ESCRITORIO', '#fef3c7', 'font-weight="bold"')}
-    ${T(195, 362, 11, 'HAB. 408', '#34d399', 'font-weight="bold"')}${T(178, 494, 8, '══ VENTANA EXTERIOR ══', '#7dd3fc')}
-    <!-- 410 -->
-    ${toilet(281, 345)}${bed(285, 415, 58, 48, '#1c3340')}${T(316, 395, 10, 'HAB. 410', '#5b6b82')}
-    <!-- 412 -->
-    ${toilet(397, 349)}
-    <g transform="rotate(14 450 400)">${blk(425, 385, 55, 35, '#3a1d28', '#12060b', 4, 2)}</g>
-    ${[[435, 340], [442, 344], [448, 338], [439, 350]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.6" fill="#d4a017"/><circle cx="${x - .7}" cy="${y - .7}" r=".9" fill="#fff6c9"/>`).join('')}
-    <circle cx="378" cy="450" r="2" fill="#050a12"/><circle cx="383" cy="442" r="1.6" fill="#050a12"/><circle cx="380" cy="462" r="1.8" fill="#050a12"/>
-    ${T(448, 368, 10.5, 'HAB. 412', '#f87171', 'font-weight="bold"')}${T(448, 455, 8, '18 Casquillos 9mm', '#fca5a5')}`;
-
-  /* ---------- CUBO DE ESCALERA ---------- */
-  const st = `
-    ${T(560, 72, 13, 'CUBO DE ESCALERA (P4→P1)', '#f59e0b', 'font-weight="bold" text-anchor="start"')}
-    ${T(560, 88, 9.5, 'TIRO VERTICAL DE CONCRETO ARMADO', '#64748b', 'text-anchor="start"')}
-    ${flight(575, 122, 75, 90)}${flight(662, 122, 75, 90)}
-    <line x1="656" y1="118" x2="656" y2="216" stroke="#cbd5e1" stroke-width="3"/><line x1="656" y1="118" x2="656" y2="216" stroke="#475569" stroke-width="1" transform="translate(1.5 2)"/>
-    ${chevrons(612, 150, '#bae6fd')}${chevrons(700, 150, '#bae6fd')}
-    ${T(656, 226, 10, 'TRAMO P4 → P3', '#bae6fd', 'font-weight="bold"')}
-    <line x1="566" y1="234" x2="749" y2="234" stroke="#cbd5e1" stroke-width="2.5"/><line x1="566" y1="236.5" x2="749" y2="236.5" stroke="#475569" stroke-width="1.5"/>
-    ${flight(662, 250, 75, 110)}${chevrons(700, 280, '#fca5a5')}
-    <g transform="rotate(-12 583 300)">${blk(566, 275, 34, 52, '#3b4a61', '#0f1724', 5, 3)}<rect x="570" y="279" width="26" height="44" rx="2" fill="none" stroke="#f59e0b" stroke-width="1.3"/></g>
-    ${T(588, 342, 7, 'CARRITO', '#fde68a')}${T(645, 262, 10, 'DESCANSO PISO 2', '#f87171', 'font-weight="bold"')}
-    <line x1="566" y1="377" x2="749" y2="377" stroke="#cbd5e1" stroke-width="2.5"/><line x1="566" y1="379.5" x2="749" y2="379.5" stroke="#475569" stroke-width="1.5"/>
-    ${flight(575, 392, 162, 65)}${chevrons(656, 410, '#a7f3d0')}
-    ${T(658, 482, 9.5, 'SALIDA A MUELLE (PB) ➔', '#34d399', 'font-weight="bold"')}
-    <path class="route-path" d="M 122 106 L 122 95 L 655 95 L 655 110" fill="none" stroke="#38bdf8" stroke-width="2"/>
-    <path class="route-path" d="M 760 455 L 790 455 L 790 220 L 810 220" fill="none" stroke="#10b981" stroke-width="2.5"/>`;
-
-  /* ---------- PLANTA BAJA ---------- */
-  const pb = `
-    ${T(805, 72, 13, 'PLANTA BAJA — MUELLE DE CARGA, LOBBY Y PATIO EXTERIOR', '#10b981', 'font-weight="bold" text-anchor="start"')}
-    ${T(805, 88, 9.5, 'COTA ±0.00m • DISTANCIA MUELLE A VEHÍCULO: 15.00 METROS', '#64748b', 'text-anchor="start"')}
-    <!-- Muelle -->
-    <rect x="812" y="294" width="211" height="7" fill="#eab308" opacity=".35"/>
-    ${blk(822, 120, 32, 32, '#7a5a2e', '#2a1b09', 5, 2)}<path d="M822 120L854 152M854 120L822 152" stroke="#4a3517" stroke-width="1.2"/>
-    ${blk(860, 120, 32, 32, '#7a5a2e', '#2a1b09', 5, 2)}<path d="M860 120L892 152M892 120L860 152" stroke="#4a3517" stroke-width="1.2"/>
-    <text class="lbl" x="1012" y="178" font-size="8" fill="#fca5a5" text-anchor="middle" transform="rotate(-90 1012 178)">CORTINA ACERO (+2 RUIDO)</text>
-    ${T(915, 205, 11, 'MUELLE DE CARGA', '#fcd34d', 'font-weight="bold"')}${T(915, 268, 8.5, 'Puerta Peatonal Lateral ➔', '#34d399')}
-    <!-- Lobby -->
-    <path d="M846 372 Q 934 330 1030 372 L 1030 400 Q 934 362 846 400Z" fill="#2b3550" stroke="#64748b" stroke-width="1.5"/>
-    <path d="M846 372 Q 934 330 1030 372" fill="none" stroke="#fff" stroke-opacity=".2" stroke-width="2"/>
-    <polygon points="880,440 905,432 925,448 899,462" fill="#3a2a2a" stroke="#f87171" stroke-width="1"/><polygon points="980,455 1004,448 1012,466 986,470" fill="#3a2a2a" stroke="#f87171" stroke-width="1"/>
-    ${T(942, 418, 11.5, 'LOBBY PRINCIPAL', '#f87171', 'font-weight="bold"')}${T(942, 488, 8.5, '[ZONA COLAPSADA — EVITADA]', '#fca5a5')}
-    <!-- Patio -->
-    ${[130, 280].map(y => `<line x1="1034" y1="${y}" x2="1206" y2="${y}" stroke="#eab308" stroke-width="1.5" stroke-dasharray="14 10" opacity=".45"/>`).join('')}
-    <line x1="1032" y1="195" x2="1205" y2="195" stroke="#38bdf8" stroke-width="2" stroke-dasharray="5 4"/>
-    <path d="M1042 189l-8 6l8 6M1196 189l8 6l-8 6" fill="none" stroke="#38bdf8" stroke-width="1.6"/>
-    ${T(1118, 186, 9.5, '15.00 m', '#7dd3fc', 'font-weight="bold"')}${T(1118, 152, 9.5, 'PATIO DE MANIOBRAS', '#94a3b8')}
-    <!-- Pickup -->
-    ${[135, 245].map(y => `<line x1="1235" y1="${y}" x2="1355" y2="${y}" stroke="#475569" stroke-width="1.5" stroke-dasharray="4 4"/>`).join('')}
-    <g transform="translate(1248 152)">
-      <rect x="2" y="6" width="92" height="44" rx="8" fill="#000" opacity=".4"/>
-      <rect x="0" y="0" width="92" height="44" rx="8" fill="#047857" stroke="#6ee7b7" stroke-width="1.8"/>
-      <rect x="62" y="5" width="26" height="34" rx="2" fill="#064e3b" stroke="#34d399"/><path d="M62 22H88" stroke="#34d399" stroke-opacity=".4"/>
-      <path d="M18 4 L36 8 L36 36 L18 40 Z" fill="#0f172a" stroke="#6ee7b7"/><rect x="36" y="6" width="24" height="32" rx="2" fill="#059669" stroke="#6ee7b7"/>
-      <rect x="6" y="-3" width="14" height="6" rx="2" fill="#0b1220"/><rect x="6" y="41" width="14" height="6" rx="2" fill="#0b1220"/><rect x="66" y="-3" width="14" height="6" rx="2" fill="#0b1220"/><rect x="66" y="41" width="14" height="6" rx="2" fill="#0b1220"/>
-      <circle cx="3" cy="10" r="3" fill="#fde68a"/><circle cx="3" cy="34" r="3" fill="#fde68a"/>
-    </g>
-    ${T(1294, 222, 9.5, 'PICKUP (3/4 TANQUE)', '#34d399', 'font-weight="bold"')}
-    <!-- Caseta -->
-    ${blk(1135, 375, 52, 52, '#2a3a52', '#0c1522', 6, 4)}<rect x="1130" y="370" width="62" height="10" rx="2" fill="#475569"/>${T(1161, 404, 7.5, 'CASETA', '#fcd34d')}
-    <g transform="rotate(28 1216 404)">${blk(1182, 388, 68, 32, '#5a1f22', '#1a0708', 4, 6)}<rect x="1190" y="392" width="20" height="22" rx="3" fill="#1b0b0d" opacity=".7"/></g>
-    <line x1="1196" y1="326" x2="1260" y2="334" stroke="#eab308" stroke-width="4" stroke-dasharray="8 6"/>
-    ${T(1235, 452, 8.5, 'Auto Colisionado en Salida', '#fca5a5')}
-    <path class="route-path" d="M 1295 245 L 1295 485" fill="none" stroke="#10b981" stroke-width="3"/>
-    ${T(1332, 485, 9, 'SALIDA VIAL ▼', '#34d399', 'font-weight="bold"')}`;
-
-  const hits = ROOM_BOUNDS.filter(b => ROOMS[b.id]).map(b =>
-    `<rect class="room-hit" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" onclick="selectRoom('${b.id}')"/>`).join('');
-
-  return `${SVG_DEFS}
-    <rect x="0" y="0" width="1420" height="600" rx="12" fill="url(#pGridM)" stroke="#293b56" stroke-width="2"/>
-    ${slabs}${floors}${p4}${st}${pb}
-    <g filter="url(#fWall)">${walls}</g>${curbs}${doors}${hits}`;
+function isTokenVisibleOnFloor(t, floor) {
+  if (t.floor === floor) return true;
+  if (t.inStairs) return true;
+  return false;
 }
 
-// Niebla: una nube por sala. Se abre con clases CSS (transición suave)
-function buildFogLayer() {
-  return ROOM_BOUNDS.map(b => {
-    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-    const fs = Math.max(6.5, Math.min(9.5, (b.w - 8) / (b.name.length * 0.68)));
-    return `<g class="fog-cloud" data-room="${b.id}" onclick="revealRoom('${b.id}', event)">
-      <rect x="${b.x + 3}" y="${b.y + 3}" width="${b.w - 6}" height="${b.h - 6}" rx="8" fill="url(#gFog)" opacity=".97"/>
-      <rect class="mist" x="${b.x + 3}" y="${b.y + 3}" width="${b.w - 6}" height="${b.h - 6}" rx="8" fill="url(#pMist)"/>
-      <circle cx="${cx}" cy="${cy - 8}" r="14" fill="#0b1220" stroke="#a78bfa" stroke-width="1.5"/>
-      <text x="${cx}" y="${cy - 3.5}" fill="#c4b5fd" font-family="monospace" font-size="13" text-anchor="middle" font-weight="bold">?</text>
-      <text class="lbl" x="${cx}" y="${cy + 18}" fill="#ddd6fe" font-size="${fs.toFixed(1)}" text-anchor="middle" font-weight="bold">${b.name.toUpperCase()}</text>
-    </g>`;
-  }).join('');
+function getTokenRenderCoords(t, floor) {
+  if (t.floor === floor) {
+    return { x: t.x, y: t.y, roomId: t.roomId };
+  }
+  if (floor === 'p4') return { x: 180, y: 145, roomId: 'fire_door_4p' };
+  if (floor === 'p2') {
+    return t.floor === 'p4'
+      ? { x: 235, y: 245, roomId: 'stairs_p4_p3' }
+      : { x: 720, y: 245, roomId: 'stairs_p1' };
+  }
+  if (floor === 'pb') return { x: 130, y: 185, roomId: 'stairs_exit_pb' };
+  return { x: t.x, y: t.y, roomId: t.roomId };
 }
 
-/* =====================================================================
-   CAPAS DINÁMICAS (selección, amenazas, personajes, trayectoria)
-   ===================================================================== */
-function ensureSvg() {
-  let svg = document.getElementById('main-svg');
-  if (svg) return svg;
-  document.getElementById('map-stage').innerHTML =
-    `<svg id="main-svg" class="arch-blueprint" viewBox="0 25 1480 650" xmlns="http://www.w3.org/2000/svg">
-      <g id="L-static">${buildStaticArt()}</g>
-      <g id="L-select"></g><g id="L-enemies"></g>
-      <g id="L-fog">${buildFogLayer()}</g>
-      <g id="L-trail"></g><g id="L-chars"></g>
+function isRoomVisible(floor, roomId) {
+  if (!STATE.fogActive) return true;
+  for (const t of Object.values(STATE.tokens)) {
+    if (isTokenVisibleOnFloor(t, floor)) {
+      const pos = getTokenRenderCoords(t, floor);
+      if (pos.roomId === roomId) return true;
+    }
+  }
+  return false;
+}
+
+/* ============================================================================
+   FAITHFUL CHARACTER MINIATURES (SVG PORTRAITS & TOP-DOWN 3D FIGURES)
+   Based on the exact survivor dossier:
+   - AU (Audomaro): 1.88m, 92kg athletic/muscular, tactical vest, scar on left shoulder, Glock 17 + long suppressor
+   - AR (Armando): 1.83m, 78kg agile/wiry, loose urban jacket, crossbody sling bag, B&T MP9 SMG with clear mag
+   - GZ (Gonzalo): 1.69m, 84kg stocky/sedentary, polo shirt, thick-framed glasses, bandaged right calf, blueprint roll
+   ============================================================================ */
+
+function getAvatarPortraitSVG(id) {
+  if (id === 'AU') {
+    return `<svg class="char-avatar-svg" viewBox="0 0 32 32">
+      <circle cx="16" cy="16" r="15" fill="#064e3b"/>
+      <path d="M 6 30 Q 16 21 26 30" fill="#1e293b" stroke="#10b981" stroke-width="1.5"/>
+      <circle cx="16" cy="13" r="6.5" fill="#d6a886"/>
+      <path d="M 10 10 Q 16 6 22 10" fill="#1c1917"/>
+      <rect x="21" y="16" width="8" height="3" rx="1" fill="#475569"/>
     </svg>`;
-  return document.getElementById('main-svg');
+  }
+  if (id === 'AR') {
+    return `<svg class="char-avatar-svg" viewBox="0 0 32 32">
+      <circle cx="16" cy="16" r="15" fill="#0c4a6e"/>
+      <path d="M 7 30 Q 16 22 25 30" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+      <line x1="10" y1="22" x2="22" y2="30" stroke="#f59e0b" stroke-width="2"/>
+      <circle cx="16" cy="13" r="6" fill="#dfb391"/>
+      <path d="M 10 11 Q 16 5 23 11" fill="#27272a"/>
+    </svg>`;
+  }
+  return `<svg class="char-avatar-svg" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="15" fill="#78350f"/>
+    <path d="M 5 30 Q 16 20 27 30" fill="#0284c7" stroke="#f59e0b" stroke-width="1.5"/>
+    <circle cx="16" cy="13.5" r="6.8" fill="#e5b899"/>
+    <rect x="10.5" y="11.5" width="4.5" height="3.2" rx="1" fill="none" stroke="#111827" stroke-width="1.4"/>
+    <rect x="17" y="11.5" width="4.5" height="3.2" rx="1" fill="none" stroke="#111827" stroke-width="1.4"/>
+    <line x1="15" y1="13" x2="17" y2="13" stroke="#111827" stroke-width="1.2"/>
+  </svg>`;
 }
 
-function viewBoxFor(view) {
-  return { p4: '20 50 520 480', stairs: '535 50 250 480', pb: '790 50 605 480' }[view] || '0 25 1480 650';
-}
+function renderDetailedCharacterFigure(t, pos, isSel, stairTag) {
+  const ang = t.angle || -90;
+  let figureBody = '';
 
-function tokenArt(o, kind) {
-  const st = STATUS[o.status];
-  const isChar = kind === 'char';
-  const col = isChar ? o.color : '#ef4444';
-  const sel = isChar && STATE.activeToken === o.id;
-  const dim = o.status === 'muerto' || o.status === 'neutralizado';
-  const ring = o.status === 'incapacitado' ? '#ef4444' : (dim ? '#64748b' : col);
-  return `
-    <g class="char-token-svg tok-${o.status}" data-token-id="${o.id}" transform="translate(${o.x}, ${o.y})" filter="url(#tokenShadow)"
-       onmousedown="startTokenDrag(event, '${o.id}')" ontouchstart="startTokenDrag(event, '${o.id}')">
-      <circle cx="0" cy="0" r="24" fill="transparent"/>
-      ${isChar && st.vision ? `<circle cx="0" cy="0" r="46" fill="${col}" opacity=".06" pointer-events="none"/><circle cx="0" cy="0" r="30" fill="${col}" opacity=".09" pointer-events="none"/>` : ''}
-      ${o.status === 'incapacitado' ? `<circle class="incap-ring" cx="0" cy="0" r="22" fill="none" stroke="#ef4444" stroke-width="2.2" stroke-dasharray="4 3"/>` : ''}
-      ${sel ? `<circle cx="0" cy="0" r="19" fill="none" stroke="${col}" stroke-width="1.6" stroke-dasharray="3 2"/>` : ''}
-      <g class="token-body">
-        <ellipse cx="0" cy="9" rx="13" ry="5" fill="#000" opacity=".45"/>
-        ${!isChar ? `<circle class="radar-ring" cx="0" cy="0" r="12" fill="none" stroke="#ef4444" stroke-width="1.6"/>` : ''}
-        <circle class="token-outer" cx="0" cy="0" r="${isChar ? 14 : 12}" fill="${isChar ? '#090d14' : '#4a1111'}" stroke="${ring}" stroke-width="${isChar ? 3 : 2.2}"/>
-        <circle cx="0" cy="0" r="${isChar ? 9.5 : 8.5}" fill="${dim ? '#334155' : col}" opacity="${isChar ? .35 : .55}"/>
-        <path d="M-8 -5.5 A 9.5 9.5 0 0 1 3 -9.5" fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.6" stroke-linecap="round"/>
-        <text x="0" y="3.5" fill="#fff" font-family="monospace" font-size="${isChar ? 9.5 : 8.5}" text-anchor="middle" font-weight="bold">${o.id}</text>
+  if (t.id === 'AU') {
+    // AUDOMARO: Broad 1.88m/92kg muscular shoulders, tactical vest, left shoulder scar, extended arms holding Glock 17 + long suppressor
+    figureBody = `
+      <g transform="rotate(${ang})">
+        <!-- Flashlight 800lm tactical beam -->
+        <path d="M 4 0 L 105 -42 A 112 112 0 0 1 105 42 Z" fill="url(#coneGrad)" opacity="0.62" pointer-events="none"/>
+        <!-- Boots / Legs stride -->
+        <ellipse cx="-5" cy="-10" rx="5" ry="3.5" fill="#1c1917"/>
+        <ellipse cx="4" cy="10" rx="5" ry="3.5" fill="#1c1917"/>
+        <!-- Broad Muscular Torso & Tactical Vest -->
+        <path d="M -9 -16 C -3 -19, 5 -18, 9 -13 L 9 13 C 5 18, -3 19, -9 16 Z" fill="#111827" stroke="#10b981" stroke-width="1.8"/>
+        <!-- Tactical IFAK Pouch & Vest Straps -->
+        <rect x="-11" y="-8" width="5" height="16" rx="2" fill="#064e3b" stroke="#34d399" stroke-width="0.9"/>
+        <!-- Left Shoulder Bullet Scar Mark -->
+        <path d="M -2 -14 L 3 -11 M 2 -14 L -2 -11" stroke="#f87171" stroke-width="1.3"/>
+        <!-- Muscular Arms in CQC / Two-Handed Pistol Stance -->
+        <path d="M 4 -12 Q 13 -8 16 -2" fill="none" stroke="#1f2937" stroke-width="4.5" stroke-linecap="round"/>
+        <path d="M 4 12 Q 13 6 16 1" fill="none" stroke="#1f2937" stroke-width="4.5" stroke-linecap="round"/>
+        <!-- Nitrile/Leather Gloves -->
+        <circle cx="16" cy="-1" r="2.8" fill="#090d14"/>
+        <!-- Glock 17 Gen 5 + Threaded Suppressor -->
+        <rect x="15" y="-2.2" width="8" height="3.2" rx="1" fill="#334155" stroke="#94a3b8" stroke-width="0.6"/>
+        <rect x="23" y="-1.6" width="9" height="2" rx="0.8" fill="#0f172a" stroke="#64748b" stroke-width="0.6"/>
+        <!-- Head with 3D shading & short military cut -->
+        <circle cx="0" cy="0" r="8.2" fill="url(#skinGrad)" stroke="#1c1917" stroke-width="1.2"/>
+        <path d="M -7 -5 Q -2 -9 4 -6 Q -1 -2 -7 -5 Z" fill="#18181b"/>
       </g>
-      ${o.status !== 'activo' ? `<g><circle cx="11" cy="-11" r="6.5" fill="#0b1220" stroke="${st.color}" stroke-width="1.5"/><text x="11" y="-7.6" fill="${st.color}" font-family="monospace" font-size="${o.status === 'muerto' ? 8 : 9}" text-anchor="middle" font-weight="bold">${st.icon}</text></g>` : ''}
-      ${!isChar ? `<text class="lbl" x="0" y="-17" fill="#fca5a5" font-size="8" text-anchor="middle">${dim ? st.label : 'Amenaza'}</text>` : ''}
-      ${isChar && o.status !== 'activo' ? `<text class="lbl" x="0" y="-19" fill="${st.color}" font-size="8" text-anchor="middle" font-weight="bold">${st.label.toUpperCase()}</text>` : ''}
-    </g>`;
-}
-
-function renderSelection() {
-  const b = ROOM_BOUNDS.find(r => r.id === STATE.selectedRoom);
-  document.getElementById('L-select').innerHTML = b
-    ? `<rect class="sel-glow" x="${b.x + 1}" y="${b.y + 1}" width="${b.w - 2}" height="${b.h - 2}" rx="6"/>` : '';
-}
-
-function renderTrail() {
-  let html = '';
-  if (STATE.dragState) {
-    const ds = STATE.dragState;
-    const t = STATE.tokens[ds.tokenId] || STATE.enemies[ds.tokenId];
-    const col = t ? (t.color || '#ef4444') : '#38bdf8';
-    const dist = (Math.hypot(ds.curX - ds.startX, ds.curY - ds.startY) * 0.045).toFixed(1) + 'm';
-    const mx = (ds.startX + ds.curX) / 2, my = (ds.startY + ds.curY) / 2;
-    html = `<g pointer-events="none">
-      <line x1="${ds.startX}" y1="${ds.startY}" x2="${ds.curX}" y2="${ds.curY}" stroke="${col}" stroke-width="2.5" stroke-dasharray="5 4"/>
-      <circle cx="${ds.startX}" cy="${ds.startY}" r="5" fill="${col}" opacity=".6"/>
-      <rect x="${mx - 24}" y="${my - 18}" width="48" height="16" rx="4" fill="#090d14" stroke="${col}"/>
-      <text x="${mx}" y="${my - 7}" fill="#fff" font-family="monospace" font-size="9" text-anchor="middle" font-weight="bold">${dist}</text></g>`;
-  } else if (STATE.lastTrail) {
-    const lt = STATE.lastTrail;
-    const t = STATE.tokens[lt.tokenId];
-    const col = t ? t.color : '#10b981';
-    const mx = (lt.x1 + lt.x2) / 2, my = (lt.y1 + lt.y2) / 2;
-    html = `<g pointer-events="none" opacity=".82">
-      <line x1="${lt.x1}" y1="${lt.y1}" x2="${lt.x2}" y2="${lt.y2}" stroke="${col}" stroke-width="2" stroke-dasharray="4 4"/>
-      <circle cx="${lt.x1}" cy="${lt.y1}" r="4" fill="none" stroke="${col}" stroke-width="1.5"/>
-      <rect x="${mx - 26}" y="${my - 9}" width="52" height="15" rx="4" fill="#090d14" stroke="${col}"/>
-      <text x="${mx}" y="${my + 1.5}" fill="${col}" font-family="monospace" font-size="8.5" text-anchor="middle" font-weight="bold">${lt.tokenId}: ${lt.distMeters}</text></g>`;
+    `;
+  } else if (t.id === 'AR') {
+    // ARMANDO: Agile 1.83m/78kg wiry build, urban jacket, crossbody sling bag (mariconera), B&T MP9 SMG with clear 30-rd magazine
+    figureBody = `
+      <g transform="rotate(${ang})">
+        <path d="M 4 0 L 90 -34 A 96 96 0 0 1 90 34 Z" fill="url(#coneGrad)" opacity="0.48" pointer-events="none"/>
+        <!-- Sneakers / Agile stance -->
+        <ellipse cx="-6" cy="-9" rx="4.5" ry="3" fill="#334155"/>
+        <ellipse cx="5" cy="9" rx="4.5" ry="3" fill="#334155"/>
+        <!-- Slimmer Urban Jacket Torso -->
+        <rect x="-8" y="-14" width="15" height="28" rx="7" fill="#1e293b" stroke="#38bdf8" stroke-width="1.8"/>
+        <!-- Crossbody Sling Bag (Riñonera/Mariconera cruzada) -->
+        <line x1="-6" y1="-12" x2="6" y2="12" stroke="#d97706" stroke-width="3.2" stroke-linecap="round"/>
+        <rect x="-2" y="4" width="7" height="5" rx="1.5" fill="#78350f" stroke="#f59e0b" stroke-width="0.8"/>
+        <!-- Arms holding B&T MP9 Submachine Gun -->
+        <path d="M 3 -11 Q 12 -7 14 -1" fill="none" stroke="#334155" stroke-width="4" stroke-linecap="round"/>
+        <path d="M 3 11 Q 11 6 16 2" fill="none" stroke="#334155" stroke-width="4" stroke-linecap="round"/>
+        <!-- Compact B&T MP9 + Transparent 30rd Magazine sticking out -->
+        <rect x="13" y="-2" width="11" height="3.6" rx="1" fill="#0f172a" stroke="#7dd3fc" stroke-width="0.7"/>
+        <rect x="16" y="-7.5" width="2.6" height="6" rx="0.6" fill="#fde047" opacity="0.85" stroke="#ca8a04" stroke-width="0.5"/>
+        <!-- Head with tousled street hair -->
+        <circle cx="0" cy="0" r="7.6" fill="url(#skinGrad)" stroke="#1c1917" stroke-width="1.1"/>
+        <path d="M -7 -4 Q 0 -9 6 -3 Q 1 -1 -7 -4 Z" fill="#090d14"/>
+      </g>
+    `;
+  } else {
+    // GONZALO: 1.69m, 84kg stocky/rounded abdominal build, blue polo shirt, thick-framed glasses, white bandage on right leg, holding floorplan croquis
+    figureBody = `
+      <g transform="rotate(${ang})">
+        <path d="M 4 0 L 65 -26 A 70 70 0 0 1 65 26 Z" fill="url(#coneGrad)" opacity="0.35" pointer-events="none"/>
+        <!-- Right leg with white compressive bandage & slip-on loafer -->
+        <ellipse cx="-3" cy="11" rx="5" ry="3.8" fill="#f8fafc" stroke="#ef4444" stroke-width="1.2"/>
+        <ellipse cx="-4" cy="-10" rx="4.5" ry="3.2" fill="#451a03"/>
+        <!-- Stocky Rounded Torso (84kg) in Polo Shirt -->
+        <ellipse cx="0" cy="0" rx="10.5" ry="15.5" fill="#0369a1" stroke="#f59e0b" stroke-width="1.8"/>
+        <!-- Polo Collar -->
+        <path d="M 3 -6 L 8 -2 L 3 6" fill="none" stroke="#e0f2fe" stroke-width="1.5"/>
+        <!-- Arms holding rolled-up hotel blueprint croquis -->
+        <path d="M 2 -12 Q 10 -9 12 -4" fill="none" stroke="#e5b899" stroke-width="3.8" stroke-linecap="round"/>
+        <path d="M 2 12 Q 10 9 12 4" fill="none" stroke="#e5b899" stroke-width="3.8" stroke-linecap="round"/>
+        <rect x="10" y="-6" width="4.5" height="12" rx="1.5" fill="#fef3c7" stroke="#d97706" stroke-width="0.9"/>
+        <!-- Head + Thick-framed Paste Glasses (-3.50 diopters) -->
+        <circle cx="0" cy="0" r="8" fill="url(#skinGrad)" stroke="#1c1917" stroke-width="1.1"/>
+        <!-- Eyeglasses frames on front of face -->
+        <rect x="5.2" y="-5.2" width="3" height="4.2" rx="0.8" fill="#e0f2fe" stroke="#090d14" stroke-width="1.3"/>
+        <rect x="5.2" y="1" width="3" height="4.2" rx="0.8" fill="#e0f2fe" stroke="#090d14" stroke-width="1.3"/>
+        <line x1="6.8" y1="-1" x2="6.8" y2="1" stroke="#090d14" stroke-width="1.3"/>
+      </g>
+    `;
   }
-  document.getElementById('L-trail').innerHTML = html;
+
+  return `
+    <g class="char-token-svg" data-token-id="${t.id}" transform="translate(${pos.x}, ${pos.y})" filter="url(#tokenShadow)" onmousedown="startTokenDrag(event, '${t.id}')" ontouchstart="startTokenDrag(event, '${t.id}')">
+      <!-- Enlarged touch hit circle for mobile -->
+      <circle cx="0" cy="0" r="28" fill="transparent"/>
+      <!-- 3D Miniature Base Pedestal Ring -->
+      <ellipse cx="0" cy="2" rx="18" ry="18" fill="rgba(9, 13, 20, 0.75)" stroke="${t.tripped ? '#ef4444' : t.color}" stroke-width="${isSel ? '3' : '1.8'}"/>
+      ${isSel ? `<circle cx="0" cy="0" r="22" fill="none" stroke="${t.color}" stroke-width="1.6" stroke-dasharray="4 2"/>` : ''}
+      ${t.tripped ? `<circle cx="0" cy="0" r="25" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-dasharray="4 2"/>` : ''}
+
+      ${figureBody}
+
+      <!-- Floating Callsign Tag -->
+      <g transform="translate(0, 23)" pointer-events="none">
+        <rect x="-15" y="-7" width="30" height="13" rx="4" fill="#090d14" stroke="${t.color}" stroke-width="1.2"/>
+        <text x="0" y="2.5" fill="#fff" font-family="monospace" font-size="8.5" text-anchor="middle" font-weight="bold">${t.id}</text>
+      </g>
+      ${stairTag ? `<text x="0" y="38" fill="#38bdf8" font-family="monospace" font-size="8.5" text-anchor="middle" font-weight="bold">${stairTag}</text>` : ''}
+      ${t.tripped ? `<text x="0" y="-22" fill="#fca5a5" font-family="monospace" font-size="8.5" text-anchor="middle" font-weight="bold">⚠️ TROPEZÓ</text>` : ''}
+    </g>
+  `;
 }
 
-function updateFogDOM() {
-  const vis = visibleRoomIds();
-  document.querySelectorAll('#L-fog .fog-cloud').forEach(g => g.classList.toggle('fog-off', vis.has(g.dataset.room)));
+function renderZombieFigure(x, y, rot, label = '') {
+  return `
+    <g transform="translate(${x}, ${y})" filter="url(#tokenShadow)" pointer-events="none">
+      <circle class="radar-ring" cx="0" cy="0" r="10" fill="none" stroke="#ef4444" stroke-width="1.8"/>
+      <g transform="rotate(${rot})">
+        <!-- Blood pool under feet -->
+        <ellipse cx="-2" cy="1" rx="15" ry="12" fill="rgba(127, 29, 29, 0.55)"/>
+        <!-- Tattered suit shoulders -->
+        <path d="M -8 -14 C -2 -16, 6 -15, 9 -10 L 8 11 C 4 15, -3 16, -8 13 Z" fill="#27272a" stroke="#991b1b" stroke-width="1.6"/>
+        <!-- Outstretched grasping arms -->
+        <path d="M 3 -11 Q 12 -9 16 -5" fill="none" stroke="#64748b" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M 3 11 Q 13 8 17 4" fill="none" stroke="#64748b" stroke-width="3.5" stroke-linecap="round"/>
+        <!-- Bullet wounds on chest -->
+        <circle cx="2" cy="-4" r="1.6" fill="#dc2626"/>
+        <circle cx="-1" cy="3" r="1.8" fill="#dc2626"/>
+        <circle cx="3" cy="5" r="1.4" fill="#dc2626"/>
+        <!-- Pale necrotic head with milky white eyes -->
+        <circle cx="1" cy="0" r="7.5" fill="#94a3b8" stroke="#334155" stroke-width="1.2"/>
+        <circle cx="6" cy="-2.5" r="1.3" fill="#f8fafc"/>
+        <circle cx="6" cy="2.5" r="1.3" fill="#f8fafc"/>
+      </g>
+      ${label ? `<text x="0" y="-17" fill="#fca5a5" font-family="monospace" font-size="8.5" text-anchor="middle" font-weight="bold">${label}</text>` : ''}
+    </g>
+  `;
 }
 
-function renderBlueprintSVG() {
-  const svg = ensureSvg();
-  svg.setAttribute('viewBox', viewBoxFor(STATE.view));
-  renderSelection();
-  document.getElementById('L-enemies').innerHTML = Object.values(STATE.enemies).map(e => tokenArt(e, 'enemy')).join('');
-  document.getElementById('L-chars').innerHTML = Object.values(STATE.tokens).map(t => tokenArt(t, 'char')).join('');
-  renderTrail();
-  updateFogDOM();
-}
-
-/* =====================================================================
-   INTERFAZ (HUD, escuadrón, cajón de la sala)
-   ===================================================================== */
-function syncFloorButtons() {
-  document.querySelectorAll('.floor-pill').forEach(b => b.classList.remove('active'));
-  const activeBtn = document.getElementById(`btn-view-${STATE.view}`);
-  if (activeBtn) activeBtn.classList.add('active');
-}
-
-// Botón "Niebla" = vuelve a cubrir todo el mapa. "Ver todo" se crea junto a él para el modo director.
-function syncGmButtons() {
-  const fog = document.getElementById('gm-btn');
-  if (!fog) return;
-  fog.classList.remove('gm-on');
-  fog.textContent = '🌫️ Niebla';
-  fog.title = 'Vuelve a cubrir el mapa: solo se ven las salas con personajes';
-  let all = document.getElementById('gm-reveal-btn');
-  if (!all) {
-    all = document.createElement('button');
-    all.id = 'gm-reveal-btn';
-    all.className = fog.className;
-    all.onclick = toggleReveal;
-    fog.insertAdjacentElement('afterend', all);
-  }
-  all.classList.toggle('gm-on', STATE.gmMode);
-  all.textContent = STATE.gmMode ? '🔓 Ver todo: SÍ' : '🔒 Ver todo';
-}
+/* ============================================================================
+   UI RENDERERS
+   ============================================================================ */
 
 function renderAll() {
-  syncFloorButtons();
-  syncGmButtons();
   renderNoise();
+  renderFloorBadges();
   renderSquadBar();
   renderBlueprintSVG();
   renderDrawer();
+}
+
+function renderFloorBadges() {
+  ['p4', 'p2', 'pb'].forEach(fl => {
+    const btn = document.getElementById(`tab-${fl}`);
+    if (btn) btn.classList.toggle('active', STATE.currentFloor === fl);
+    const count = Object.values(STATE.tokens).filter(t => isTokenVisibleOnFloor(t, fl)).length;
+    const badge = document.getElementById(`badge-${fl}`);
+    if (badge) {
+      badge.style.display = count > 0 ? 'inline-block' : 'none';
+      badge.textContent = count;
+    }
+  });
+}
+
+function switchFloorTab(fl) {
+  STATE.currentFloor = fl;
+  const visibleChar = Object.values(STATE.tokens).find(t => isTokenVisibleOnFloor(t, fl));
+  if (visibleChar) {
+    STATE.selectedRoom = getTokenRenderCoords(visibleChar, fl).roomId;
+  } else {
+    const defaults = { 'p4': 'room_408', 'p2': 'stairs_p4_p3', 'pb': 'stairs_exit_pb' };
+    STATE.selectedRoom = defaults[fl];
+  }
+  renderAll();
+}
+
+function toggleFog() {
+  STATE.fogActive = !STATE.fogActive;
+  const btn = document.getElementById('fog-btn');
+  if (STATE.fogActive) {
+    btn.classList.remove('gm-on');
+    btn.textContent = '👁️ Niebla';
+  } else {
+    btn.classList.add('gm-on');
+    btn.textContent = '🔓 Todo';
+  }
+  renderAll();
+}
+
+function toggleIsoView() {
+  STATE.isoView = !STATE.isoView;
+  const btn = document.getElementById('iso-btn');
+  btn.classList.toggle('iso-on', STATE.isoView);
+  btn.textContent = STATE.isoView ? '📐 Vista 2D' : '🧊 Cámara 3D';
+  updateStageTransform();
 }
 
 function renderNoise() {
@@ -690,34 +568,834 @@ function renderNoise() {
   for (let i = 1; i <= 6; i++) {
     const d = document.createElement('div');
     d.className = 'pip';
-    if (i <= STATE.noise) d.classList.add(STATE.noise <= 2 ? 'on-low' : (STATE.noise <= 4 ? 'on-mid' : 'on-high'));
+    if (i <= STATE.noise) {
+      d.classList.add(STATE.noise <= 2 ? 'on-low' : (STATE.noise <= 4 ? 'on-mid' : 'on-high'));
+    }
     d.onclick = () => { STATE.noise = (STATE.noise === i ? i - 1 : i); renderNoise(); };
     box.appendChild(d);
   }
   document.getElementById('noise-txt').textContent = `${STATE.noise}/6`;
 }
 
-function toggleFOW() {
-  STATE.gmMode = false;
-  STATE.peek = {};
-  STATE.lastRollHtml = '<span style="color:#c4b5fd;">🌫️ <strong>Niebla restablecida.</strong> Solo se ven las salas donde hay personajes con visión.</span>';
+function renderSquadBar() {
+  const bar = document.getElementById('squad-bar');
+  bar.innerHTML = Object.values(STATE.tokens).map(t => {
+    const pct = Math.round((t.hp / t.maxHp) * 100);
+    const flLabel = t.floor === 'p4' ? 'P4' : (t.floor === 'p2' ? 'P2-3' : 'PB');
+    return `
+      <div class="token-card ${STATE.activeToken === t.id ? 'active-token' : ''} ${t.tripped ? 'tripped-card' : ''}" onclick="focusCharacter('${t.id}')">
+        <div class="token-head">
+          <span class="token-callsign">${getAvatarPortraitSVG(t.id)}<span>[${t.id}] ${t.name}</span></span>
+          <span style="font-family:var(--font-mono);font-size:9.5px;color:#34d399;">${t.hp}/${t.maxHp}</span>
+        </div>
+        <div class="token-loc-badge">
+          <span>📍 ${t.roomName}</span>
+          <strong style="color:#fcd34d;">[${flLabel}${t.inStairs ? '•ESC' : ''}]</strong>
+        </div>
+        <div class="token-sub">
+          <button class="trip-toggle-btn ${t.tripped ? 'is-tripped' : ''}" onclick="toggleTripState('${t.id}', event)">
+            ${t.tripped ? '⚠️ Tropezó' : '🏃 Móvil'}
+          </button>
+          ${t.ammo > 0 ? `<strong style="color:#fbbf24;">🔫 ${t.ammo}+${t.reserve}</strong>` : `<span>👓 Croquis</span>`}
+        </div>
+        <div class="mini-hp-bar"><div class="mini-hp-fill" style="width:${pct}%;background:${t.color};"></div></div>
+      </div>
+    `;
+  }).join('');
+}
+
+function focusCharacter(tokenId) {
+  STATE.activeToken = tokenId;
+  const t = STATE.tokens[tokenId];
+  if (t && STATE.currentFloor !== t.floor) {
+    STATE.currentFloor = t.floor;
+  }
+  if (t) STATE.selectedRoom = t.roomId;
   renderAll();
 }
 
-function toggleReveal() {
-  STATE.gmMode = !STATE.gmMode;
+function toggleTripState(tokenId, evt) {
+  if (evt) evt.stopPropagation();
+  const t = STATE.tokens[tokenId];
+  if (!t) return;
+  t.tripped = !t.tripped;
+  STATE.lastRollHtml = t.tripped
+    ? `<span style="color:#f87171;">⚠️ <strong>${t.name} [${t.id}]</strong> marcado como <strong>Tropezó / Anclado</strong> en ${t.roomName}.</span>`
+    : `<span style="color:#34d399;">✓ <strong>${t.name} [${t.id}]</strong> recuperó el equilibrio y puede desplazarse.</span>`;
   renderAll();
 }
 
-function switchView(v) {
-  STATE.view = v;
-  resetCamera();
-  syncFloorButtons();
+function selectRoom(roomId) {
+  if (STATE.dragState) return;
+  STATE.selectedRoom = roomId;
+  STATE.drawerMinimized = false;
+  document.getElementById('context-drawer').classList.remove('minimized');
+  document.body.classList.remove('drawer-is-minimized');
   renderBlueprintSVG();
+  renderDrawer();
+}
+
+function renderDrawer() {
+  const fl = STATE.currentFloor;
+  const rInfo = ROOM_DETAILS[STATE.selectedRoom];
+  if (!rInfo) return;
+  const activeChar = STATE.tokens[STATE.activeToken];
+  const visible = isRoomVisible(fl, STATE.selectedRoom);
+
+  document.getElementById('drawer-title').textContent = `📍 ${rInfo.title}`;
+
+  // Connected doors for this room so user can also toggle them from the panel on mobile
+  const roomDoors = (FLOOR_PORTALS[fl] || []).filter(p => p.a === STATE.selectedRoom || p.b === STATE.selectedRoom);
+  const doorsHtml = roomDoors.length > 0 ? `
+    <div style="margin-top:4px;">
+      <div style="font-family:var(--font-mono);font-size:9.5px;color:#94a3b8;margin-bottom:3px;">PUERTAS Y ACCESOS DEL SECTOR (TOCA PARA ABRIR/CERRAR):</div>
+      <div>
+        ${roomDoors.map(d => `
+          <button class="door-chip-btn ${d.isOpen ? 'open' : 'closed'}" onclick="toggleDoorById('${fl}', '${d.id}', event)">
+            <span>${d.isOpen ? '🔓' : '🔒'} ${d.label}: ${d.isOpen ? 'ABIERTA' : 'CERRADA'}</span>
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  if (!visible) {
+    document.getElementById('drawer-body').innerHTML = `
+      <div style="padding:10px;background:rgba(15,23,42,0.9);border:1px dashed #64748b;border-radius:6px;font-size:11.5px;color:#94a3b8;text-align:center;">
+        🌑 <strong>Sector en Penumbra (Sin Visión Directa)</strong><br>
+        Abre la puerta conectada y arrastra una figura hacia este sector para iluminarlo.
+      </div>
+      ${doorsHtml}
+      <div class="dice-banner" style="margin-top:6px;">${STATE.lastRollHtml}</div>
+    `;
+    return;
+  }
+
+  let html = `
+    <p class="drawer-desc">${rInfo.desc}</p>
+    ${doorsHtml}
+    <div style="margin-top:4px;padding:7px 9px;background:rgba(245,158,11,0.09);border-left:3px solid var(--accent-amber);border-radius:4px;font-size:11px;color:#fde68a;">
+      <strong>Detalle Táctico:</strong> ${rInfo.secret}
+    </div>
+  `;
+
+  if (rInfo.actions && rInfo.actions.length > 0) {
+    html += `<div style="margin-top:4px;">`;
+    rInfo.actions.forEach((a, idx) => {
+      html += `
+        <button class="action-btn" onclick="runAction('${STATE.selectedRoom}', ${idx})">
+          <span>▸ [${activeChar.id}] ${a.label}</span>
+          <span style="color:var(--accent-amber);flex-shrink:0;">${a.dif > 0 ? 'DIF ' + a.dif : 'MOVER'}</span>
+        </button>
+      `;
+    });
+    html += `</div>`;
+  }
+
+  html += `<div class="dice-banner" style="margin-top:6px;">${STATE.lastRollHtml}</div>`;
+  document.getElementById('drawer-body').innerHTML = html;
+}
+
+function runAction(roomId, idx) {
+  const fl = STATE.currentFloor;
+  const rInfo = ROOM_DETAILS[roomId];
+  const a = rInfo.actions[idx];
+  const activeChar = STATE.tokens[STATE.activeToken];
+  if (!a || !activeChar) return;
+
+  if (activeChar.tripped) {
+    STATE.lastRollHtml = `<span style="color:#f87171;">⚠️ <strong>${activeChar.name}</strong> tropezó y está anclado. Desbloquéalo en su tarjeta inferior primero.</span>`;
+    renderDrawer();
+    return;
+  }
+
+  if (a.needCard && !STATE.lootMasterCard) {
+    STATE.lastRollHtml = `<span style="color:#f87171;">❌ Requiere la <strong>Tarjeta Maestra</strong> del Cuarto 402 para abrir la puerta peatonal sin ruido.</span>`;
+    renderDrawer();
+    return;
+  }
+
+  if (a.loot) STATE.lootMasterCard = true;
+  if (a.ammo && activeChar.ammo >= a.ammo) activeChar.ammo -= a.ammo;
+
+  // Automatically open associated door if specified
+  if (a.openDoorId) {
+    const p = (FLOOR_PORTALS[fl] || []).find(d => d.id === a.openDoorId);
+    if (p) p.isOpen = true;
+  }
+
+  if (a.dif === 0) {
+    if (a.changeFloorTo) {
+      activeChar.floor = a.changeFloorTo;
+      STATE.currentFloor = a.changeFloorTo;
+    }
+    if (a.targetRoom) {
+      activeChar.roomId = a.targetRoom;
+      activeChar.x = a.tx;
+      activeChar.y = a.ty;
+      const ro = getRoomById(activeChar.floor, a.targetRoom);
+      if (ro) {
+        activeChar.roomName = ro.name;
+        activeChar.inStairs = !!ro.isStairs;
+      }
+      STATE.selectedRoom = a.targetRoom;
+    }
+    STATE.lastRollHtml = `<span style="color:#38bdf8;">✓ [${activeChar.name}] ${a.ok}</span>`;
+    renderAll();
+    return;
+  }
+
+  const d10 = Math.floor(Math.random() * 10) + 1;
+  const total = d10 + a.mod;
+  const win = (d10 === 10) || (d10 !== 1 && total >= a.dif);
+
+  if (a.forceNoise) {
+    STATE.noise = Math.min(6, STATE.noise + a.forceNoise);
+  } else if (!win && a.failNoise) {
+    STATE.noise = Math.min(6, STATE.noise + a.failNoise);
+  }
+
+  if (win) {
+    if (a.targetRoom) {
+      activeChar.roomId = a.targetRoom;
+      activeChar.x = a.tx;
+      activeChar.y = a.ty;
+      const ro = getRoomById(activeChar.floor, a.targetRoom);
+      if (ro) {
+        activeChar.roomName = ro.name;
+        activeChar.inStairs = !!ro.isStairs;
+      }
+      STATE.selectedRoom = a.targetRoom;
+    }
+  } else if (a.tripOnFail) {
+    activeChar.tripped = true;
+  }
+
+  const color = win ? '#34d399' : '#f87171';
+  STATE.lastRollHtml = `
+    <div style="color:${color};font-weight:800;">🎲 [${activeChar.name}] 1d10 (${d10}) + ${a.mod} = ${total} vs DIF ${a.dif} — ${win ? 'ÉXITO' : 'FALLO / TROPIEZO'}</div>
+    <div style="color:#e2e8f0;margin-top:2px;">${win ? a.ok : a.fail}</div>
+  `;
+  renderAll();
+}
+
+/* ============================================================================
+   3D-RENDERED TEXTURES, INTERACTIVE 3D DOORS & VOLUMETRIC FURNITURE
+   ============================================================================ */
+
+function buildOrganicFogMask(floor, visibleTokens) {
+  if (!STATE.fogActive) return '';
+  const rooms = FLOOR_ROOMS[floor] || [];
+
+  const litRoomsSvg = rooms.filter(r => isRoomVisible(floor, r.id)).map(r => `
+    <rect x="${r.x - 6}" y="${r.y - 6}" width="${r.w + 12}" height="${r.h + 12}" rx="14" fill="white" filter="url(#softEdgeBlur)"/>
+  `).join('');
+
+  const tokenHalosSvg = visibleTokens.map(t => {
+    const pos = getTokenRenderCoords(t, floor);
+    return `<circle cx="${pos.x}" cy="${pos.y}" r="145" fill="url(#flashlightMaskGrad)"/>`;
+  }).join('');
+
+  return `
+    <mask id="organicFogMask">
+      <rect x="0" y="0" width="920" height="540" fill="#d8dee9"/>
+      <g fill="black">
+        ${litRoomsSvg}
+        ${tokenHalosSvg}
+      </g>
+    </mask>
+    <rect x="0" y="0" width="920" height="540" rx="14" fill="#02050a" opacity="0.92" mask="url(#organicFogMask)" pointer-events="none"/>
+  `;
+}
+
+// Renders interactive 3D doors that physically swing open or shut when clicked/tapped!
+function renderInteractive3DDoors(floor) {
+  const portals = FLOOR_PORTALS[floor] || [];
+  return portals.map(p => {
+    if (!isRoomVisible(floor, p.a) && !isRoomVisible(floor, p.b)) return '';
+    const cx = p.x + p.w / 2;
+    const cy = p.y + p.h / 2;
+    const isH = p.orient === 'h';
+
+    // 3D Door Frame Jambs + Physical Leaf (Closed vs Swung Open 90 deg)
+    let doorLeafSvg = '';
+    if (p.isOpen) {
+      // Open threshold glow + swung open 3D wooden/metal door leaf
+      doorLeafSvg = `
+        <rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="3" fill="rgba(16, 185, 129, 0.22)" stroke="#10b981" stroke-width="1.4" stroke-dasharray="4 2"/>
+        ${p.swing ? `<path d="${p.swing}" fill="rgba(16, 185, 129, 0.10)" stroke="#34d399" stroke-width="1.5" stroke-dasharray="3 2"/>` : ''}
+        ${isH
+          ? `<rect x="${p.x + 2}" y="${cy}" width="6" height="32" rx="1.5" fill="url(#wood3DGrad)" stroke="#fbbf24" stroke-width="1" filter="url(#propShadow)"/>`
+          : `<rect x="${cx}" y="${p.y + 2}" width="32" height="6" rx="1.5" fill="url(#wood3DGrad)" stroke="#fbbf24" stroke-width="1" filter="url(#propShadow)"/>`
+        }
+      `;
+    } else {
+      // Closed solid 3D door leaf blocking the wall opening + brass handle
+      doorLeafSvg = `
+        <rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="3" fill="rgba(239, 68, 68, 0.18)"/>
+        ${isH
+          ? `<rect x="${p.x + 3}" y="${cy - 4}" width="${p.w - 6}" height="8" rx="2" fill="url(#wood3DGrad)" stroke="#f59e0b" stroke-width="1.4" filter="url(#propShadow)"/>`
+          : `<rect x="${cx - 4}" y="${p.y + 3}" width="8" height="${p.h - 6}" rx="2" fill="url(#wood3DGrad)" stroke="#f59e0b" stroke-width="1.4" filter="url(#propShadow)"/>`
+        }
+      `;
+    }
+
+    return `
+      <g class="door-interactive" onclick="toggleDoorById('${floor}', '${p.id}', event)" title="Toca para abrir o cerrar ${p.label}">
+        <!-- Enlarged touch hit target for mobile thumbs -->
+        <rect x="${p.x - 8}" y="${p.y - 8}" width="${p.w + 16}" height="${p.h + 16}" fill="transparent"/>
+        ${doorLeafSvg}
+        <!-- Interactive Lock / Unlock Badge on Door -->
+        <circle cx="${cx}" cy="${cy}" r="9.5" fill="${p.isOpen ? '#064e3b' : '#450a0a'}" stroke="${p.isOpen ? '#34d399' : '#f87171'}" stroke-width="1.5" filter="url(#propShadow)"/>
+        <text x="${cx}" y="${cy + 3.5}" font-size="9" text-anchor="middle">${p.isOpen ? '🔓' : '🔒'}</text>
+      </g>
+    `;
+  }).join('');
+}
+
+// 3D Extruded Wall Helper (draws shadow, 3D vertical bevel, and lit concrete top cap)
+function draw3DRoomWalls(x, y, w, h, strokeTop = '#94a3b8') {
+  return `
+    <g pointer-events="none">
+      <!-- Deep Interior Ambient Occlusion Shadow -->
+      <rect x="${x + 4}" y="${y + 4}" width="${w - 8}" height="${h - 8}" fill="none" stroke="rgba(0,0,0,0.68)" stroke-width="8" filter="url(#softEdgeBlur)"/>
+      <!-- 3D Extruded Wall Side Face (Dark Slate Bevel) -->
+      <rect x="${x}" y="${y + 4}" width="${w}" height="${h}" fill="none" stroke="#1e293b" stroke-width="9"/>
+      <!-- 3D Lit Top Wall Cap -->
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${strokeTop}" stroke-width="5"/>
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#e2e8f0" stroke-width="1" opacity="0.4"/>
+    </g>
+  `;
+}
+
+// 3D Volumetric Bed with quilted mattress, shaded pillows & side tables
+function drawBed(x, y, w, h, colorCabecera = '#451a03', colorColcha = '#0f766e') {
+  return `
+    <g filter="url(#wallShadow)">
+      <!-- 3D Nightstands with Glowing Warm Lamp -->
+      <rect x="${x - 18}" y="${y + 4}" width="15" height="15" rx="3" fill="url(#wood3DGrad)" stroke="#92400e" stroke-width="1"/>
+      <circle cx="${x - 10.5}" cy="${y + 11.5}" r="5.5" fill="url(#lampGlowGrad)"/>
+      <rect x="${x + w + 3}" y="${y + 4}" width="15" height="15" rx="3" fill="url(#wood3DGrad)" stroke="#92400e" stroke-width="1"/>
+      <!-- 3D Extruded Bed Base -->
+      <rect x="${x}" y="${y + 4}" width="${w}" height="${h}" rx="6" fill="#0f172a"/>
+      <!-- Quilted Mattress -->
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="url(#mattressGrad)" stroke="#64748b" stroke-width="1.5"/>
+      <!-- 3D Carved Wood Headboard -->
+      <rect x="${x - 2}" y="${y - 2}" width="${w + 4}" height="11" rx="3" fill="url(#wood3DGrad)" stroke="#b45309" stroke-width="1"/>
+      <!-- 3D Shaded Pillows -->
+      <rect x="${x + 7}" y="${y + 12}" width="${w/2 - 10}" height="15" rx="6" fill="url(#pillowGrad)" stroke="#94a3b8" stroke-width="0.8"/>
+      <rect x="${x + w/2 + 3}" y="${y + 12}" width="${w/2 - 10}" height="15" rx="6" fill="url(#pillowGrad)" stroke="#94a3b8" stroke-width="0.8"/>
+      <!-- 3D Duvet / Folded Blanket with Specular Creases -->
+      <path d="M ${x+2} ${y+31} Q ${x+w/2} ${y+26} ${x+w-2} ${y+32} L ${x+w-2} ${y+h-3} Q ${x+w/2} ${y+h+1} ${x+2} ${y+h-3} Z" fill="${colorColcha}" stroke="#042f2e" stroke-width="1"/>
+      <path d="M ${x+6} ${y+42} Q ${x+w/2} ${y+36} ${x+w-6} ${y+44}" fill="none" stroke="rgba(255,255,255,0.22)" stroke-width="2"/>
+      <path d="M ${x+8} ${y+56} Q ${x+w/2} ${y+51} ${x+w-8} ${y+58}" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="2"/>
+    </g>
+  `;
+}
+
+function drawBathroom(x, y, w, h) {
+  return `
+    <g>
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#bathTiles3D)"/>
+      ${draw3DRoomWalls(x, y, w, h, '#64748b')}
+      <!-- Walk-in Glass Shower with Metallic Drain -->
+      <rect x="${x + 6}" y="${y + 6}" width="32" height="32" rx="3" fill="rgba(56, 189, 248, 0.16)" stroke="#bae6fd" stroke-width="1.5"/>
+      <circle cx="${x + 22}" cy="${y + 22}" r="3.5" fill="#334155" stroke="#94a3b8" stroke-width="0.8"/>
+      <!-- 3D Porcelain Toilet -->
+      <g filter="url(#propShadow)">
+        <rect x="${x + w - 23}" y="${y + 6}" width="17" height="9" rx="2.5" fill="url(#pillowGrad)" stroke="#94a3b8" stroke-width="1"/>
+        <ellipse cx="${x + w - 14.5}" cy="${y + 22}" rx="8" ry="10" fill="url(#pillowGrad)" stroke="#94a3b8" stroke-width="1"/>
+        <ellipse cx="${x + w - 14.5}" cy="${y + 22}" rx="5" ry="6.5" fill="#cbd5e1"/>
+      </g>
+      <!-- Marble Vanity Counter & Sink -->
+      <g filter="url(#propShadow)">
+        <rect x="${x + 6}" y="${y + h - 20}" width="40" height="14" rx="3" fill="#1e293b" stroke="#64748b" stroke-width="1.2"/>
+        <ellipse cx="${x + 26}" cy="${y + h - 13}" rx="9.5" ry="5.5" fill="url(#pillowGrad)" stroke="#94a3b8" stroke-width="0.8"/>
+      </g>
+    </g>
+  `;
+}
+
+function drawFoliageCluster(cx, cy, r) {
+  return `
+    <g filter="url(#wallShadow)" opacity="0.9" pointer-events="none">
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="url(#treeGradDark)"/>
+      <circle cx="${cx - r*0.32}" cy="${cy - r*0.24}" r="${r*0.72}" fill="url(#treeGradMid)"/>
+      <circle cx="${cx + r*0.28}" cy="${cy + r*0.22}" r="${r*0.65}" fill="url(#treeGradMid)"/>
+      <circle cx="${cx - r*0.12}" cy="${cy - r*0.15}" r="${r*0.42}" fill="#34d399" opacity="0.45"/>
+    </g>
+  `;
+}
+
+function renderBlueprintSVG() {
+  const stage = document.getElementById('map-stage');
+  const fl = STATE.currentFloor;
+  const visibleTokens = Object.values(STATE.tokens).filter(t => isTokenVisibleOnFloor(t, fl));
+  let floorContent = '';
+
+  if (fl === 'p4') {
+    const sel = FLOOR_ROOMS.p4.find(r => r.id === STATE.selectedRoom);
+    floorContent = `
+      ${drawFoliageCluster(28, 120, 24)}
+      ${drawFoliageCluster(32, 240, 19)}
+      ${drawFoliageCluster(892, 160, 25)}
+      ${drawFoliageCluster(888, 440, 21)}
+
+      <text x="50" y="42" fill="#38bdf8" font-family="monospace" font-size="14" font-weight="bold">PLANTA PISO 4 — ALA NORTE DEL HOTEL (TEXTURAS 3D Y PUERTAS INTERACTIVAS)</text>
+      <text x="50" y="60" fill="#94a3b8" font-family="monospace" font-size="10">TOCA CUALQUIER PUERTA (🔒/🔓) PARA ABRIRLA O CERRARLA • ARRASTRA LAS FIGURAS DE AUDOMARO, ARMANDO Y GONZALO</text>
+
+      <!-- PASARELA EXTERIOR 14M -->
+      <g class="room-hit" onclick="selectRoom('walkway_4p')">
+        <rect x="50" y="290" width="75" height="210" rx="4" fill="url(#metalGrate)" stroke="#64748b" stroke-width="3.5" filter="url(#wallShadow)"/>
+        <line x1="54" y1="290" x2="54" y2="500" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 4"/>
+        <text x="88" y="395" fill="#cbd5e1" font-family="monospace" font-size="9.5" text-anchor="middle" transform="rotate(-90 88 395)">PASARELA METÁLICA (+14m)</text>
+      </g>
+
+      <!-- BUILDING EXTERIOR 3D SHELL -->
+      <rect x="119" y="74" width="747" height="432" rx="10" fill="#020408" filter="url(#wallShadow)"/>
+      <rect x="125" y="80" width="735" height="420" rx="4" fill="#0f172a"/>
+
+      <!-- ESCALERA PROVEEDORES (P4) -->
+      <g class="room-hit" onclick="selectRoom('fire_door_4p')">
+        <rect x="125" y="80" width="110" height="130" fill="url(#concrete3D)"/>
+        ${draw3DRoomWalls(125, 80, 110, 130, '#38bdf8')}
+        <rect x="136" y="90" width="88" height="62" rx="2" fill="url(#stairSteps3D)" stroke="#64748b" stroke-width="2" filter="url(#propShadow)"/>
+        <line x1="180" y1="90" x2="180" y2="152" stroke="#38bdf8" stroke-width="3.5"/>
+        <circle cx="180" cy="152" r="4.5" fill="#38bdf8"/>
+        <text x="180" y="172" fill="#38bdf8" font-family="monospace" font-size="10" text-anchor="middle" font-weight="bold">CUBO ESCALERA</text>
+        <text x="180" y="185" fill="#bae6fd" font-family="monospace" font-size="8" text-anchor="middle">Bajada a Pisos 3–2</text>
+      </g>
+
+      <!-- CUARTO DE SERVICIO 402 -->
+      <g class="room-hit" onclick="selectRoom('room_402')">
+        <rect x="235" y="80" width="175" height="130" fill="url(#concrete3D)"/>
+        ${draw3DRoomWalls(235, 80, 175, 130, '#94a3b8')}
+        <g filter="url(#wallShadow)">
+          <rect x="245" y="88" width="105" height="22" rx="3" fill="#334155" stroke="#94a3b8" stroke-width="1.2"/>
+          <rect x="250" y="91" width="22" height="15" rx="2" fill="url(#pillowGrad)"/>
+          <rect x="276" y="91" width="22" height="15" rx="2" fill="url(#pillowGrad)"/>
+          <circle cx="315" cy="99" r="5.5" fill="#fde047" stroke="#ca8a04" stroke-width="1"/>
+          <circle cx="329" cy="99" r="5.5" fill="#fde047" stroke="#ca8a04" stroke-width="1"/>
+        </g>
+        <g filter="url(#wallShadow)">
+          <rect x="246" y="122" width="48" height="44" rx="4" fill="url(#wood3DGrad)" stroke="#b45309" stroke-width="1.5"/>
+          <rect x="253" y="130" width="15" height="10" rx="1.5" fill="#38bdf8" stroke="#fff" stroke-width="0.9"/>
+          <path d="M 275 130 L 285 155 Q 287 160 280 160" fill="none" stroke="#ef4444" stroke-width="3.2" stroke-linecap="round"/>
+        </g>
+        <g filter="url(#wallShadow)">
+          <circle cx="376" cy="118" r="22" fill="#334155" stroke="#f59e0b" stroke-width="2"/>
+          <circle cx="376" cy="118" r="17" fill="#0f172a"/>
+          <path d="M 365 114 Q 376 104 386 116 Q 380 129 368 122 Z" fill="url(#pillowGrad)"/>
+          <text x="376" y="150" fill="#fca5a5" font-family="monospace" font-size="7.5" text-anchor="middle" font-weight="bold">CESTO ROPA</text>
+        </g>
+        <text x="325" y="190" fill="#fde68a" font-family="monospace" font-size="10.5" text-anchor="middle" font-weight="bold">SERVICIO 402</text>
+      </g>
+
+      <!-- HABITACIÓN 404 -->
+      <g class="room-hit" onclick="selectRoom('room_404')">
+        <rect x="410" y="80" width="145" height="130" fill="url(#wood3DPlanks)"/>
+        ${draw3DRoomWalls(410, 80, 145, 130, '#64748b')}
+        ${drawBed(452, 88, 66, 56, '#451a03', '#1e293b')}
+        ${drawBathroom(410, 80, 34, 58)}
+        <text x="485" y="185" fill="#94a3b8" font-family="monospace" font-size="10" text-anchor="middle">SUITE 404</text>
+      </g>
+
+      <!-- HABITACIÓN 406 -->
+      <g class="room-hit" onclick="selectRoom('room_406')">
+        <rect x="555" y="80" width="145" height="130" fill="url(#wood3DPlanks)"/>
+        ${draw3DRoomWalls(555, 80, 145, 130, '#64748b')}
+        ${drawBed(597, 88, 66, 56, '#451a03', '#1e293b')}
+        ${drawBathroom(555, 80, 34, 58)}
+        <text x="630" y="185" fill="#94a3b8" font-family="monospace" font-size="10" text-anchor="middle">SUITE 406</text>
+      </g>
+
+      <!-- ELEVADORES BLOQUEADOS -->
+      <g class="room-hit" onclick="selectRoom('elevators_4p')">
+        <rect x="700" y="80" width="160" height="130" fill="#181218"/>
+        ${draw3DRoomWalls(700, 80, 160, 130, '#991b1b')}
+        <rect x="715" y="92" width="56" height="58" fill="#05080d" stroke="#475569" stroke-width="2.5"/>
+        <line x1="715" y1="92" x2="771" y2="150" stroke="#991b1b" stroke-width="2"/>
+        <rect x="785" y="92" width="56" height="58" fill="#05080d" stroke="#475569" stroke-width="2.5"/>
+        <line x1="785" y1="92" x2="841" y2="150" stroke="#991b1b" stroke-width="2"/>
+        <text x="780" y="180" fill="#f87171" font-family="monospace" font-size="10" text-anchor="middle" font-weight="bold">ELEVADORES (CLAUSURADOS)</text>
+      </g>
+
+      <!-- PASILLO CENTRAL ALFOMBRADO -->
+      <g class="room-hit" onclick="selectRoom('corridor_4p')">
+        <rect x="125" y="210" width="735" height="95" fill="url(#carpet3D)"/>
+        <rect x="135" y="220" width="715" height="75" rx="4" fill="none" stroke="rgba(245, 158, 11, 0.28)" stroke-width="2"/>
+        <path d="M 695 295 Q 640 265 560 275 T 490 272" fill="none" stroke="rgba(153, 27, 27, 0.65)" stroke-width="6.5" stroke-linecap="round"/>
+        <circle cx="515" cy="268" r="9" fill="rgba(127, 29, 29, 0.7)"/>
+        <circle cx="665" cy="285" r="12" fill="rgba(127, 29, 29, 0.7)"/>
+        ${drawFoliageCluster(142, 286, 10)}
+        ${drawFoliageCluster(842, 228, 10)}
+
+        ${isRoomVisible('p4', 'corridor_4p') ? renderZombieFigure(480, 272, -155, 'Infectado 412 (En Letargo)') : ''}
+      </g>
+
+      <!-- HABITACIÓN 408 (REFUGIO INICIAL) -->
+      <g class="room-hit" onclick="selectRoom('room_408')">
+        <rect x="125" y="305" width="245" height="195" fill="url(#wood3DPlanks)"/>
+        ${draw3DRoomWalls(125, 305, 245, 195, '#10b981')}
+        ${drawBathroom(125, 305, 82, 82)}
+        <rect x="148" y="396" width="128" height="92" rx="8" fill="#17253b" stroke="#38bdf8" stroke-width="1.2" opacity="0.8"/>
+        ${drawBed(162, 405, 92, 74, '#451a03', '#0f766e')}
+        <g filter="url(#wallShadow)">
+          <circle cx="328" cy="435" r="17" fill="url(#wood3DGrad)" stroke="#b45309" stroke-width="1.5"/>
+          <rect x="294" y="425" width="13" height="19" rx="5" fill="#334155" stroke="#64748b" stroke-width="1"/>
+          <rect x="348" y="425" width="13" height="19" rx="5" fill="#334155" stroke="#64748b" stroke-width="1"/>
+          <rect x="321" y="430" width="9" height="7" rx="1.5" fill="#ef4444"/>
+          <circle cx="335" cy="438" r="3.2" fill="#38bdf8"/>
+        </g>
+        <!-- Solid Mahogany Desk Barricading Door 408 -->
+        <g filter="url(#wallShadow)" transform="rotate(-4 246 322)">
+          <rect x="214" y="313" width="64" height="18" rx="3" fill="url(#wood3DGrad)" stroke="#f59e0b" stroke-width="1.8"/>
+          <text x="246" y="325" fill="#fef3c7" font-family="monospace" font-size="7" text-anchor="middle" font-weight="bold">ESCRITORIO</text>
+        </g>
+        <rect x="165" y="496" width="120" height="7" rx="2" fill="#38bdf8" stroke="#e0f2fe" stroke-width="1.2"/>
+        <text x="315" y="352" fill="#34d399" font-family="monospace" font-size="11.5" text-anchor="middle" font-weight="bold">SUITE 408</text>
+      </g>
+
+      <!-- HABITACIÓN 410 -->
+      <g class="room-hit" onclick="selectRoom('room_410')">
+        <rect x="370" y="305" width="225" height="195" fill="url(#wood3DPlanks)"/>
+        ${draw3DRoomWalls(370, 305, 225, 195, '#64748b')}
+        ${drawBathroom(370, 305, 76, 78)}
+        ${drawBed(435, 408, 86, 72, '#3f271d', '#1e3a5f')}
+        <text x="515" y="352" fill="#94a3b8" font-family="monospace" font-size="11" text-anchor="middle">SUITE 410</text>
+      </g>
+
+      <!-- HABITACIÓN 412 -->
+      <g class="room-hit" onclick="selectRoom('room_412')">
+        <rect x="595" y="305" width="265" height="195" fill="url(#wood3DPlanks)"/>
+        ${draw3DRoomWalls(595, 305, 265, 195, '#991b1b')}
+        ${drawBathroom(595, 305, 76, 78)}
+        <g transform="rotate(8 745 430)">
+          ${drawBed(700, 398, 86, 72, '#450a0a', '#7f1d1d')}
+        </g>
+        <path d="M 675 335 Q 705 355 690 380 Q 665 365 675 335 Z" fill="rgba(153, 27, 27, 0.72)"/>
+        <circle cx="682" cy="325" r="2.2" fill="#fbbf24"/>
+        <circle cx="690" cy="331" r="2.2" fill="#fbbf24"/>
+        <circle cx="698" cy="322" r="2.2" fill="#fbbf24"/>
+        <circle cx="705" cy="336" r="2.2" fill="#fbbf24"/>
+        <text x="755" y="352" fill="#f87171" font-family="monospace" font-size="11.5" text-anchor="middle" font-weight="bold">SUITE 412</text>
+      </g>
+
+      ${sel ? `<rect class="selected-outline" x="${sel.x+3}" y="${sel.y+3}" width="${sel.w-6}" height="${sel.h-6}" rx="4"/>` : ''}
+    `;
+  } else if (fl === 'p2') {
+    const sel = FLOOR_ROOMS.p2.find(r => r.id === STATE.selectedRoom);
+    floorContent = `
+      <text x="50" y="42" fill="#f59e0b" font-family="monospace" font-size="14" font-weight="bold">PISOS 3 Y 2 — TIRO VERTICAL DE ESCALERA DE PROVEEDORES</text>
+      <text x="50" y="60" fill="#94a3b8" font-family="monospace" font-size="10">CONCRETO ARMADO 3D • BARANDALES METÁLICOS • RELLANO INTERMEDIO DEL PISO 2</text>
+
+      <rect x="121" y="81" width="733" height="398" rx="8" fill="#020408" filter="url(#wallShadow)"/>
+
+      <!-- TRAMO P4 -> P3 -->
+      <g class="room-hit" onclick="selectRoom('stairs_p4_p3')">
+        <rect x="125" y="85" width="235" height="390" fill="url(#concrete3D)"/>
+        ${draw3DRoomWalls(125, 85, 235, 390, '#38bdf8')}
+        <rect x="145" y="110" width="195" height="150" rx="3" fill="url(#stairSteps3D)" stroke="#64748b" stroke-width="2.5" filter="url(#wallShadow)"/>
+        <line x1="242" y1="110" x2="242" y2="260" stroke="#38bdf8" stroke-width="4.5"/>
+        <text x="242" y="315" fill="#38bdf8" font-family="monospace" font-size="12" text-anchor="middle" font-weight="bold">RAMPA PISO 4 → PISO 3</text>
+      </g>
+
+      <!-- DESCANSO PISO 2 -->
+      <g class="room-hit" onclick="selectRoom('stairs_p2')">
+        <rect x="360" y="85" width="250" height="390" fill="url(#concrete3D)"/>
+        ${draw3DRoomWalls(360, 85, 250, 390, '#ef4444')}
+        <g filter="url(#wallShadow)" transform="rotate(-14 425 140)">
+          <rect x="385" y="115" width="76" height="48" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-width="2.5"/>
+          <path d="M 392 122 Q 425 112 452 128 Q 440 155 400 148 Z" fill="url(#pillowGrad)"/>
+        </g>
+        ${renderZombieFigure(485, 215, 25, 'Errante 1')}
+        ${renderZombieFigure(528, 252, -35, 'Errante 2')}
+        <text x="485" y="335" fill="#f87171" font-family="monospace" font-size="12.5" text-anchor="middle" font-weight="bold">DESCANSO PISO 2</text>
+      </g>
+
+      <!-- TRAMO SALIDA P1 / PB -->
+      <g class="room-hit" onclick="selectRoom('stairs_p1')">
+        <rect x="610" y="85" width="240" height="390" fill="url(#concrete3D)"/>
+        ${draw3DRoomWalls(610, 85, 240, 390, '#10b981')}
+        <rect x="632" y="110" width="195" height="150" rx="3" fill="url(#stairSteps3D)" stroke="#64748b" stroke-width="2.5" filter="url(#wallShadow)"/>
+        <line x1="730" y1="110" x2="730" y2="260" stroke="#10b981" stroke-width="4.5"/>
+        <text x="730" y="315" fill="#34d399" font-family="monospace" font-size="12" text-anchor="middle" font-weight="bold">BAJADA A PISO 1 / PB</text>
+      </g>
+
+      ${sel ? `<rect class="selected-outline" x="${sel.x+3}" y="${sel.y+3}" width="${sel.w-6}" height="${sel.h-6}" rx="4"/>` : ''}
+    `;
+  } else if (fl === 'pb') {
+    const sel = FLOOR_ROOMS.pb.find(r => r.id === STATE.selectedRoom);
+    floorContent = `
+      ${drawFoliageCluster(445, 62, 20)}
+      ${drawFoliageCluster(615, 58, 24)}
+      ${drawFoliageCluster(885, 130, 22)}
+      ${drawFoliageCluster(885, 310, 25)}
+      ${drawFoliageCluster(880, 465, 22)}
+
+      <text x="50" y="42" fill="#10b981" font-family="monospace" font-size="14" font-weight="bold">PLANTA BAJA — MUELLE DE CARGA, LOBBY Y PATIO EXTERIOR (COTA ±0.00m)</text>
+      <text x="50" y="60" fill="#94a3b8" font-family="monospace" font-size="10">ABRE LA PUERTA DEL MUELLE (🔒/🔓) PARA SALIR AL PATIO • PICKUP 3D A 15 METROS</text>
+
+      <rect x="66" y="81" width="798" height="418" rx="8" fill="#020408" filter="url(#wallShadow)"/>
+
+      <!-- SALIDA ESCALERA PB -->
+      <g class="room-hit" onclick="selectRoom('stairs_exit_pb')">
+        <rect x="70" y="85" width="120" height="195" fill="url(#concrete3D)"/>
+        ${draw3DRoomWalls(70, 85, 120, 195, '#38bdf8')}
+        <rect x="82" y="98" width="94" height="68" rx="2" fill="url(#stairSteps3D)" stroke="#38bdf8" stroke-width="1.8" filter="url(#propShadow)"/>
+        <text x="130" y="212" fill="#38bdf8" font-family="monospace" font-size="10.5" text-anchor="middle" font-weight="bold">ESCALERA PB</text>
+      </g>
+
+      <!-- MUELLE DE CARGA -->
+      <g class="room-hit" onclick="selectRoom('dock_pb')">
+        <rect x="190" y="85" width="230" height="195" fill="url(#concrete3D)"/>
+        ${draw3DRoomWalls(190, 85, 230, 195, '#f59e0b')}
+        <g filter="url(#wallShadow)">
+          <rect x="206" y="98" width="44" height="44" rx="3" fill="url(#wood3DGrad)" stroke="#b45309" stroke-width="1.5"/>
+          <line x1="206" y1="112" x2="250" y2="112" stroke="#451a03" stroke-width="2"/>
+          <line x1="206" y1="126" x2="250" y2="126" stroke="#451a03" stroke-width="2"/>
+          <rect x="260" y="98" width="40" height="40" rx="3" fill="#475569" stroke="#94a3b8" stroke-width="1.2"/>
+        </g>
+        <text x="305" y="182" fill="#fcd34d" font-family="monospace" font-size="12" text-anchor="middle" font-weight="bold">MUELLE DE CARGA</text>
+      </g>
+
+      <!-- LOBBY PRINCIPAL -->
+      <g class="room-hit" onclick="selectRoom('lobby_pb')">
+        <rect x="70" y="280" width="350" height="215" fill="#181016"/>
+        ${draw3DRoomWalls(70, 280, 350, 215, '#ef4444')}
+        <path d="M 115 335 Q 245 375 365 330" fill="none" stroke="url(#wood3DGrad)" stroke-width="8" stroke-linecap="round" filter="url(#wallShadow)"/>
+        <text x="245" y="388" fill="#f87171" font-family="monospace" font-size="12.5" text-anchor="middle" font-weight="bold">LOBBY PRINCIPAL (COLAPSADO)</text>
+      </g>
+
+      <!-- PATIO DE MANIOBRAS 15M -->
+      <g class="room-hit" onclick="selectRoom('yard_pb')">
+        <rect x="420" y="85" width="220" height="195" fill="url(#asphalt3D)"/>
+        ${draw3DRoomWalls(420, 85, 220, 195, '#38bdf8')}
+        <line x1="432" y1="175" x2="628" y2="175" stroke="#38bdf8" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="530" y="165" fill="#7dd3fc" font-family="monospace" font-size="10.5" text-anchor="middle" font-weight="bold">◄── 15.00 METROS ──►</text>
+        ${renderZombieFigure(508, 225, 15, 'Infectado')}
+        ${renderZombieFigure(562, 208, -40, 'Infectado')}
+      </g>
+
+      <!-- CAJÓN PICKUP -->
+      <g class="room-hit" onclick="selectRoom('pickup_pb')">
+        <rect x="640" y="85" width="220" height="195" fill="url(#asphalt3D)"/>
+        ${draw3DRoomWalls(640, 85, 220, 195, '#10b981')}
+        <path d="M 665 118 L 835 118 M 665 228 L 835 228" stroke="#facc15" stroke-width="2" stroke-dasharray="8 4" opacity="0.7"/>
+        <g transform="translate(682, 136)" filter="url(#wallShadow)">
+          <rect x="14" y="-5" width="22" height="7" rx="2" fill="#090d14"/>
+          <rect x="92" y="-5" width="22" height="7" rx="2" fill="#090d14"/>
+          <rect x="14" y="56" width="22" height="7" rx="2" fill="#090d14"/>
+          <rect x="92" y="56" width="22" height="7" rx="2" fill="#090d14"/>
+          <rect x="0" y="0" width="132" height="58" rx="12" fill="url(#truckBodyGrad)" stroke="#34d399" stroke-width="2.2"/>
+          <path d="M 35 7 Q 42 29 35 51 L 48 47 L 48 11 Z" fill="#0f172a" stroke="#7dd3fc" stroke-width="1.2"/>
+          <rect x="48" y="9" width="36" height="40" rx="4" fill="#065f46" stroke="#6ee7b7" stroke-width="1.2"/>
+          <rect x="88" y="7" width="38" height="44" rx="3" fill="#022c22" stroke="#10b981" stroke-width="1.2"/>
+          <circle cx="3" cy="12" r="3.5" fill="#fef08a"/>
+          <circle cx="3" cy="46" r="3.5" fill="#fef08a"/>
+          <text x="66" y="78" fill="#34d399" font-family="monospace" font-size="10.5" text-anchor="middle" font-weight="bold">🛻 PICKUP LÁZARAS (3/4 TANQUE)</text>
+        </g>
+      </g>
+
+      <!-- CASETA DE SALIDA -->
+      <g class="room-hit" onclick="selectRoom('gate_pb')">
+        <rect x="420" y="280" width="440" height="215" fill="url(#asphalt3D)"/>
+        ${draw3DRoomWalls(420, 280, 440, 215, '#475569')}
+        <g filter="url(#wallShadow)">
+          <rect x="528" y="348" width="68" height="68" rx="4" fill="#1e293b" stroke="#f59e0b" stroke-width="2.5"/>
+          <rect x="536" y="356" width="52" height="52" fill="#0f172a"/>
+          <text x="562" y="386" fill="#fcd34d" font-family="monospace" font-size="8.5" text-anchor="middle" font-weight="bold">CASETA</text>
+        </g>
+        <g transform="rotate(26 648 386)" filter="url(#wallShadow)">
+          <rect x="600" y="365" width="94" height="42" rx="9" fill="#450a0a" stroke="#f87171" stroke-width="2"/>
+          <rect x="622" y="370" width="42" height="32" rx="4" fill="#1e293b" stroke="#94a3b8" stroke-width="1"/>
+        </g>
+        <text x="655" y="452" fill="#fca5a5" font-family="monospace" font-size="10" text-anchor="middle">Sedán Colisionado en Salida Vial</text>
+      </g>
+
+      ${sel ? `<rect class="selected-outline" x="${sel.x+3}" y="${sel.y+3}" width="${sel.w-6}" height="${sel.h-6}" rx="4"/>` : ''}
+    `;
+  }
+
+  const tokensSvg = visibleTokens.map(t => {
+    const pos = getTokenRenderCoords(t, fl);
+    const isSel = STATE.activeToken === t.id;
+    const stairTag = (t.floor !== fl && t.inStairs) ? ' (En Escalera)' : '';
+    return renderDetailedCharacterFigure(t, pos, isSel, stairTag);
+  }).join('');
+
+  const emptyFloorNotice = visibleTokens.length === 0 ? `
+    <g pointer-events="none">
+      <rect x="230" y="235" width="460" height="54" rx="8" fill="rgba(9, 13, 20, 0.92)" stroke="#f59e0b" stroke-width="1.5"/>
+      <text x="460" y="258" fill="#fde68a" font-family="monospace" font-size="11.5" text-anchor="middle" font-weight="bold">NINGÚN PERSONAJE SE ENCUENTRA EN ESTE PISO ACTUALMENTE</text>
+      <text x="460" y="276" fill="#94a3b8" font-family="monospace" font-size="9.5" text-anchor="middle">Mueve al menos un personaje a la Escalera de Proveedores para verlo y desplazarlo aquí</text>
+    </g>
+  ` : '';
+
+  stage.innerHTML = `
+    <svg id="main-svg" class="arch-blueprint" viewBox="0 0 920 540" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- 3D SHADED HARDWOOD FLOOR PLANKS -->
+        <pattern id="wood3DPlanks" width="48" height="20" patternUnits="userSpaceOnUse">
+          <rect width="48" height="10" fill="url(#plankGrad1)"/>
+          <rect y="10" width="48" height="10" fill="url(#plankGrad2)"/>
+          <line x1="0" y1="0" x2="48" y2="0" stroke="#0c0a09" stroke-width="1.4"/>
+          <line x1="0" y1="10" x2="48" y2="10" stroke="#0c0a09" stroke-width="1.4"/>
+          <line x1="24" y1="0" x2="24" y2="10" stroke="#0c0a09" stroke-width="1.2"/>
+          <line x1="10" y1="10" x2="10" y2="20" stroke="#0c0a09" stroke-width="1.2"/>
+        </pattern>
+        <linearGradient id="plankGrad1" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#2e231d"/>
+          <stop offset="50%" stop-color="#241b16"/>
+          <stop offset="100%" stop-color="#1a1310"/>
+        </linearGradient>
+        <linearGradient id="plankGrad2" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#271e19"/>
+          <stop offset="50%" stop-color="#1f1713"/>
+          <stop offset="100%" stop-color="#16100d"/>
+        </linearGradient>
+
+        <!-- 3D BEVELED CERAMIC BATHROOM TILES -->
+        <pattern id="bathTiles3D" width="16" height="16" patternUnits="userSpaceOnUse">
+          <rect width="16" height="16" fill="#0d2230"/>
+          <rect x="1" y="1" width="13.5" height="13.5" rx="1.5" fill="url(#tileBevelGrad)"/>
+        </pattern>
+        <linearGradient id="tileBevelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#1b3b52"/>
+          <stop offset="100%" stop-color="#0f2536"/>
+        </linearGradient>
+
+        <!-- 3D WOVEN HOTEL CORRIDOR CARPET -->
+        <pattern id="carpet3D" width="14" height="14" patternUnits="userSpaceOnUse">
+          <rect width="14" height="14" fill="#121826"/>
+          <path d="M 7 1 L 13 7 L 7 13 L 1 7 Z" fill="#1a2438" stroke="#283652" stroke-width="0.9"/>
+          <circle cx="7" cy="7" r="1.5" fill="#38bdf8" opacity="0.22"/>
+        </pattern>
+
+        <!-- 3D POLISHED INDUSTRIAL CONCRETE -->
+        <pattern id="concrete3D" width="32" height="32" patternUnits="userSpaceOnUse">
+          <rect width="32" height="32" fill="#151d28"/>
+          <rect x="0.5" y="0.5" width="31" height="31" fill="none" stroke="#1e293b" stroke-width="0.8"/>
+          <circle cx="9" cy="11" r="1.2" fill="#263449"/>
+          <circle cx="23" cy="21" r="1.5" fill="#0f172a"/>
+        </pattern>
+
+        <!-- 3D WEATHERED EXTERIOR ASPHALT -->
+        <pattern id="asphalt3D" width="32" height="32" patternUnits="userSpaceOnUse">
+          <rect width="32" height="32" fill="#0b1119"/>
+          <circle cx="7" cy="9" r="1.1" fill="#1e293b"/>
+          <circle cx="21" cy="6" r="0.9" fill="#334155"/>
+          <circle cx="15" cy="24" r="1.4" fill="#06090f"/>
+          <circle cx="27" cy="20" r="1.1" fill="#1e293b"/>
+        </pattern>
+
+        <!-- 3D CONCRETE STAIR TREADS WITH SHADOW -->
+        <pattern id="stairSteps3D" width="12" height="11" patternUnits="userSpaceOnUse">
+          <rect width="12" height="8" fill="#243247"/>
+          <rect y="8" width="12" height="3" fill="#090d14"/>
+          <line x1="0" y1="0" x2="12" y2="0" stroke="#64748b" stroke-width="1.2"/>
+        </pattern>
+
+        <pattern id="metalGrate" width="8" height="8" patternUnits="userSpaceOnUse">
+          <rect width="8" height="8" fill="#090d14"/>
+          <path d="M 0 4 L 4 0 L 8 4 L 4 8 Z" fill="none" stroke="#334155" stroke-width="1"/>
+        </pattern>
+
+        <!-- 3D MATERIAL GRADIENTS FOR FURNITURE & MINIATURES -->
+        <linearGradient id="wood3DGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#92400e"/>
+          <stop offset="50%" stop-color="#78350f"/>
+          <stop offset="100%" stop-color="#451a03"/>
+        </linearGradient>
+        <linearGradient id="mattressGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#f8fafc"/>
+          <stop offset="100%" stop-color="#cbd5e1"/>
+        </linearGradient>
+        <radialGradient id="pillowGrad" cx="35%" cy="35%" r="70%">
+          <stop offset="0%" stop-color="#ffffff"/>
+          <stop offset="100%" stop-color="#cbd5e1"/>
+        </radialGradient>
+        <radialGradient id="skinGrad" cx="35%" cy="35%" r="70%">
+          <stop offset="0%" stop-color="#f1c6a7"/>
+          <stop offset="100%" stop-color="#b88662"/>
+        </radialGradient>
+        <radialGradient id="lampGlowGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#fef08a" stop-opacity="0.95"/>
+          <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+        </radialGradient>
+        <linearGradient id="truckBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#047857"/>
+          <stop offset="50%" stop-color="#065f46"/>
+          <stop offset="100%" stop-color="#022c22"/>
+        </linearGradient>
+        <radialGradient id="treeGradDark" cx="35%" cy="35%" r="70%">
+          <stop offset="0%" stop-color="#065f46"/>
+          <stop offset="100%" stop-color="#022c22"/>
+        </radialGradient>
+        <radialGradient id="treeGradMid" cx="35%" cy="35%" r="70%">
+          <stop offset="0%" stop-color="#10b981"/>
+          <stop offset="100%" stop-color="#047857"/>
+        </radialGradient>
+
+        <!-- SHADOWS & LIGHTING FILTERS -->
+        <filter id="wallShadow" x="-12%" y="-12%" width="130%" height="130%">
+          <feDropShadow dx="0" dy="7" stdDeviation="6.5" flood-color="#000" flood-opacity="0.88"/>
+        </filter>
+        <filter id="propShadow" x="-20%" y="-20%" width="145%" height="145%">
+          <feDropShadow dx="1" dy="3.5" stdDeviation="2.5" flood-color="#000" flood-opacity="0.8"/>
+        </filter>
+        <filter id="tokenShadow" x="-35%" y="-35%" width="170%" height="170%">
+          <feDropShadow dx="0" dy="4" stdDeviation="3.5" flood-color="#000" flood-opacity="0.92"/>
+        </filter>
+        <filter id="softEdgeBlur" x="-15%" y="-15%" width="130%" height="130%">
+          <feGaussianBlur stdDeviation="11"/>
+        </filter>
+
+        <linearGradient id="coneGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+          <stop offset="0%" stop-color="#fef08a" stop-opacity="0.58"/>
+          <stop offset="65%" stop-color="#38bdf8" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+        </linearGradient>
+
+        <radialGradient id="flashlightMaskGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="black" stop-opacity="1"/>
+          <stop offset="65%" stop-color="black" stop-opacity="0.9"/>
+          <stop offset="100%" stop-color="white" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+
+      <!-- AMBIENT EXTERIOR GROUND -->
+      <rect x="0" y="0" width="920" height="540" rx="14" fill="#060a11" stroke="#1e293b" stroke-width="2"/>
+
+      ${floorContent}
+      ${buildOrganicFogMask(fl, visibleTokens)}
+      ${renderInteractive3DDoors(fl)}
+      ${tokensSvg}
+      ${emptyFloorNotice}
+    </svg>
+  `;
+}
+
+/* ============================================================================
+   INTERACTIVE DRAG-AND-DROP WITH REAL WALL & CLOSED-DOOR COLLISION
+   ============================================================================ */
+
+let isPanning = false;
+let startPanX = 0, startPanY = 0, panX = 0, panY = 0;
+let initialPinchDist = null;
+let initialPinchZoom = 1;
+
+function updateStageTransform() {
+  const st = document.getElementById('map-stage');
+  if (STATE.isoView) {
+    st.style.transform = `translate(${panX}px, ${panY}px) scale(${STATE.zoom}) rotateX(36deg) rotateZ(-14deg)`;
+  } else {
+    st.style.transform = `translate(${panX}px, ${panY}px) scale(${STATE.zoom})`;
+  }
 }
 
 function zoomBy(factor) {
-  STATE.zoom = Math.max(0.55, Math.min(2.4, STATE.zoom * factor));
+  STATE.zoom = Math.max(0.6, Math.min(2.4, STATE.zoom * factor));
   updateStageTransform();
 }
 
@@ -736,211 +1414,6 @@ function toggleDrawer() {
   document.getElementById('drawer-toggle-lbl').textContent = STATE.drawerMinimized ? '[Expandir ▲]' : '[Minimizar ▼]';
 }
 
-function selectRoom(roomId) {
-  if (STATE.dragState || !ROOMS[roomId]) return;
-  STATE.selectedRoom = roomId;
-  STATE.drawerMinimized = false;
-  document.getElementById('context-drawer').classList.remove('minimized');
-  document.body.classList.remove('drawer-is-minimized');
-  renderBlueprintSVG();
-  renderDrawer();
-}
-
-function selectToken(id) {
-  STATE.activeToken = id;
-  renderAll();
-}
-
-function statusSelect(kind, id, current) {
-  const opts = Object.entries(STATUS).map(([k, s]) => `<option value="${k}" ${k === current ? 'selected' : ''}>${s.icon} ${s.label}</option>`).join('');
-  return `<select class="status-select s-${current}" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()" onchange="setStatus('${kind}','${id}',this.value)">${opts}</select>`;
-}
-
-function moveSingleTokenToRoom(tokenId, roomId) {
-  const r = ROOMS[roomId];
-  const t = STATE.tokens[tokenId];
-  if (!r || !t) return;
-  if (!canMove(t)) {
-    STATE.lastRollHtml = `<span style="color:#f87171;">⚠️ <strong>${t.name}</strong> está <em>${STATUS[t.status].label.toLowerCase()}</em> y no puede moverse. Cambia su estado abajo o arrástralo manualmente.</span>`;
-    renderDrawer();
-    return;
-  }
-  const offsets = { 'AU': { dx: -14, dy: -6 }, 'AR': { dx: 14, dy: -6 }, 'GZ': { dx: 0, dy: 16 } };
-  const off = offsets[tokenId] || { dx: 0, dy: 0 };
-  const oldX = t.x, oldY = t.y;
-  t.x = r.tokenSpot.x + off.dx;
-  t.y = r.tokenSpot.y + off.dy;
-  const distPx = Math.hypot(t.x - oldX, t.y - oldY);
-  STATE.lastTrail = { tokenId, x1: oldX, y1: oldY, x2: t.x, y2: t.y, distMeters: (distPx * 0.045).toFixed(1) + 'm' };
-  STATE.selectedRoom = roomId;
-  if (window.innerWidth <= 768 && STATE.view !== 'all' && r.floor !== STATE.view) STATE.view = r.floor;
-  STATE.lastRollHtml = `<span style="color:#34d399;">👣 <strong>${t.name} [${t.id}]</strong> se desplazó individualmente a <strong>${roomLabel(t)}</strong> (${STATE.lastTrail.distMeters}).</span>`;
-  renderAll();
-}
-
-function moveGroupToRoom(roomId) {
-  const r = ROOMS[roomId];
-  if (!r) return;
-  const moved = [], stayed = [];
-  const offsets = { 'AU': { dx: -16, dy: -8 }, 'AR': { dx: 16, dy: -8 }, 'GZ': { dx: 0, dy: 18 } };
-  Object.values(STATE.tokens).forEach(t => {
-    if (!canMove(t)) { stayed.push(`${t.name} (${STATUS[t.status].label.toLowerCase()})`); return; }
-    const off = offsets[t.id] || { dx: 0, dy: 0 };
-    t.x = r.tokenSpot.x + off.dx;
-    t.y = r.tokenSpot.y + off.dy;
-    moved.push(t.name);
-  });
-  STATE.selectedRoom = roomId;
-  if (window.innerWidth <= 768 && STATE.view !== 'all' && r.floor !== STATE.view) STATE.view = r.floor;
-  STATE.lastRollHtml = `<span style="color:#38bdf8;">👥 Avanzaron: <strong>${moved.join(', ') || 'Ninguno'}</strong>.${stayed.length ? ` <span style="color:#f87171;">Se quedan: <strong>${stayed.join(', ')}</strong>.</span>` : ''}</span>`;
-  renderAll();
-}
-
-// "Explorar": abre la sala a mano. Se vuelve a cubrir con el botón Niebla.
-function revealRoom(roomId, evt) {
-  if (evt) evt.stopPropagation();
-  STATE.peek[roomId] = true;
-  if (ROOMS[roomId]) STATE.selectedRoom = roomId;
-  renderAll();
-}
-
-function renderSquadBar() {
-  const bar = document.getElementById('squad-bar');
-  bar.innerHTML = Object.values(STATE.tokens).map(t => {
-    const pct = Math.round((t.hp / t.maxHp) * 100);
-    return `
-      <div class="token-card ${STATE.activeToken === t.id ? 'active-token' : ''} ${t.status === 'incapacitado' ? 'tripped-card' : ''}" style="${t.status === 'muerto' ? 'opacity:.6;' : ''}" onclick="selectToken('${t.id}')">
-        <div class="token-head">
-          <span class="token-callsign"><span class="token-dot" style="background:${t.color};"></span>[${t.id}] ${t.name}</span>
-          <span style="font-family:var(--font-mono);font-size:9.5px;color:#34d399;">${t.hp}/${t.maxHp}</span>
-        </div>
-        <div class="token-loc-badge">
-          <span>📍 ${roomLabel(t)}</span>
-          <span class="coord-txt" style="color:#94a3b8;">(${Math.round(t.x)},${Math.round(t.y)})</span>
-        </div>
-        <div class="token-sub">
-          ${statusSelect('token', t.id, t.status)}
-          ${t.ammo > 0 ? `<strong style="color:#fbbf24;">🔫 ${t.ammo}+${t.reserve}</strong>` : `<span>Croquis</span>`}
-        </div>
-        <div class="mini-hp-bar"><div class="mini-hp-fill" style="width:${pct}%;background:${t.color};"></div></div>
-      </div>`;
-  }).join('');
-}
-
-function renderDrawer() {
-  const r = ROOMS[STATE.selectedRoom];
-  if (!r) return;
-  const activeChar = STATE.tokens[STATE.activeToken];
-  const isRev = isRoomVisible(r.id);
-  document.getElementById('drawer-title').textContent = `📍 ${r.title}`;
-
-  let html = `
-    <p class="drawer-desc">${r.desc}</p>
-    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">
-      <button class="hud-btn" style="flex:1;border-color:${activeChar.color};color:#fff;" onclick="moveSingleTokenToRoom('${activeChar.id}', '${r.id}')">
-        🚶 Mover solo a ${activeChar.name} [${activeChar.id}]
-      </button>
-      <button class="hud-btn" onclick="moveGroupToRoom('${r.id}')">👥 Mover Grupo</button>
-      ${!isRev ? `<button class="hud-btn gm-on" style="width:100%;" onclick="revealRoom('${r.id}')">🔍 Explorar Habitación</button>` : ''}
-    </div>`;
-
-  if (isRev) {
-    html += `
-      <div style="margin-top:6px;padding:7px 9px;background:rgba(245,158,11,0.09);border-left:3px solid var(--accent-amber,#f59e0b);border-radius:4px;font-size:11px;color:#fde68a;">
-        <strong>Detalle Táctico:</strong> ${r.secret}
-      </div>`;
-    const here = Object.values(STATE.enemies).filter(e => { const d = detectRoomAt(e.x, e.y); return d && d.id === r.id; });
-    if (here.length) {
-      html += `<div class="enemy-list"><strong>☠ Amenazas en la sala</strong>${here.map(e =>
-        `<div class="enemy-row"><span>[${e.id}] ${e.name}</span>${statusSelect('enemy', e.id, e.status)}</div>`).join('')}</div>`;
-    }
-  } else {
-    html += `
-      <div style="margin-top:6px;padding:7px 9px;background:rgba(168,85,247,0.1);border:1px dashed #a855f7;border-radius:6px;font-size:11px;color:#e9d5ff;text-align:center;">
-        🌫️ <strong>Interior cubierto por Niebla de Guerra</strong><br>Mueve un personaje hasta aquí o toca Explorar para verla.
-      </div>`;
-  }
-
-  if (r.actions && r.actions.length > 0) {
-    html += `<div style="margin-top:6px;">`;
-    r.actions.forEach((a, idx) => {
-      html += `
-        <button class="action-btn" onclick="runAction('${r.id}', ${idx})" ${canAct(activeChar) ? '' : 'style="opacity:.55;"'}>
-          <span>▸ [${activeChar.id}] ${a.label}</span>
-          <span style="color:var(--accent-amber,#f59e0b);flex-shrink:0;">${a.dif > 0 ? 'DIF ' + a.dif : 'IR'}</span>
-        </button>`;
-    });
-    html += `</div>`;
-  }
-
-  html += `<div class="dice-banner" style="margin-top:6px;">${STATE.lastRollHtml}</div>`;
-  document.getElementById('drawer-body').innerHTML = html;
-}
-
-function runAction(roomId, idx) {
-  const r = ROOMS[roomId];
-  const a = r.actions[idx];
-  const activeChar = STATE.tokens[STATE.activeToken];
-  if (!a || !activeChar) return;
-
-  if (!canAct(activeChar)) {
-    STATE.lastRollHtml = `<span style="color:#f87171;">❌ <strong>${activeChar.name}</strong> está <em>${STATUS[activeChar.status].label.toLowerCase()}</em> y no puede actuar. Cambia su estado o elige a otro personaje.</span>`;
-    renderDrawer();
-    return;
-  }
-  if (a.needCard && !STATE.lootMasterCard) {
-    STATE.lastRollHtml = `<span style="color:#f87171;">❌ Requiere la <strong>Tarjeta Maestra</strong> del cuarto 402 para abrir esta puerta sin ruido.</span>`;
-    renderDrawer();
-    return;
-  }
-
-  if (a.loot) STATE.lootMasterCard = true;
-  if (a.ammo && activeChar.ammo >= a.ammo) activeChar.ammo -= a.ammo;
-
-  if (a.dif === 0) {
-    if (a.switchFloorOnMobile && window.innerWidth <= 768) STATE.view = a.switchFloorOnMobile;
-    if (a.next) moveSingleTokenToRoom(activeChar.id, a.next);
-    STATE.lastRollHtml = `<span style="color:#38bdf8;">✓ [${activeChar.name}] ${a.ok}</span>`;
-    renderAll();
-    return;
-  }
-
-  const d10 = Math.floor(Math.random() * 10) + 1;
-  const total = d10 + a.mod;
-  const win = (d10 === 10) || (d10 !== 1 && total >= a.dif);
-
-  if (a.forceNoise) STATE.noise = Math.min(6, STATE.noise + a.forceNoise);
-  else if (!win && a.failNoise) STATE.noise = Math.min(6, STATE.noise + a.failNoise);
-
-  let extra = '';
-  if (win) {
-    if (a.neutralize) { applyEnemyStates(a.neutralize, 'neutralizado'); extra = `<div style="color:#a5b4c8;">z Neutralizado: ${a.neutralize.join(', ')}</div>`; }
-    if (a.kill) { applyEnemyStates(a.kill, 'muerto'); extra = `<div style="color:#94a3b8;">✖ Abatidos: ${a.kill.join(', ')}</div>`; }
-    if (a.next) moveSingleTokenToRoom(activeChar.id, a.next);
-  } else if (a.tripOnFail) {
-    activeChar.status = 'incapacitado';
-    if (STATE.activeToken === activeChar.id) STATE.activeToken = firstActiveId() || activeChar.id;
-  }
-
-  const color = win ? '#34d399' : '#f87171';
-  STATE.lastRollHtml = `
-    <div style="color:${color};font-weight:800;">🎲 [${activeChar.name}] 1d10 (${d10}) + ${a.mod} = ${total} vs DIF ${a.dif} — ${win ? 'ÉXITO' : (a.tripOnFail ? 'FALLO — INCAPACITADO' : 'FALLO')}</div>
-    <div style="color:#e2e8f0;margin-top:2px;">${win ? a.ok : a.fail}</div>${extra}`;
-  renderAll();
-}
-
-/* =====================================================================
-   ENTRADA: pan, zoom con pellizco y arrastre de fichas (mouse + táctil)
-   ===================================================================== */
-let isPanning = false;
-let startPanX = 0, startPanY = 0, panX = 0, panY = 0;
-let initialPinchDist = null;
-let initialPinchZoom = 1;
-
-function updateStageTransform() {
-  document.getElementById('map-stage').style.transform = `translate(${panX}px, ${panY}px) scale(${STATE.zoom})`;
-}
-
 function clientToSVGCoords(clientX, clientY) {
   const svg = document.getElementById('main-svg');
   if (!svg) return { x: 0, y: 0 };
@@ -955,40 +1428,63 @@ function clientToSVGCoords(clientX, clientY) {
 function startTokenDrag(evt, tokenId) {
   evt.stopPropagation();
   if (evt.cancelable) evt.preventDefault();
-  const t = STATE.tokens[tokenId] || STATE.enemies[tokenId];
+  const t = STATE.tokens[tokenId];
   if (!t) return;
-  if (STATE.tokens[tokenId]) STATE.activeToken = tokenId;
-  STATE.dragState = { tokenId, startX: t.x, startY: t.y, curX: t.x, curY: t.y };
-  renderSquadBar();
-}
 
-// Mientras se arrastra solo se mueve la ficha, la trayectoria y la niebla (sin redibujar el mapa)
-function dragTo(clientX, clientY) {
-  const ds = STATE.dragState;
-  if (!ds) return;
-  const p = clientToSVGCoords(clientX, clientY);
-  ds.curX = Math.max(25, Math.min(1395, p.x));
-  ds.curY = Math.max(55, Math.min(560, p.y));
-  const t = STATE.tokens[ds.tokenId] || STATE.enemies[ds.tokenId];
-  if (t) { t.x = ds.curX; t.y = ds.curY; }
-  const g = document.querySelector(`.char-token-svg[data-token-id="${ds.tokenId}"]`);
-  if (g) g.setAttribute('transform', `translate(${ds.curX}, ${ds.curY})`);
-  renderTrail();
-  updateFogDOM();
+  STATE.activeToken = tokenId;
+
+  if (t.tripped) {
+    STATE.lastRollHtml = `<span style="color:#f87171;">⚠️ <strong>${t.name} [${t.id}]</strong> tropezó y no puede moverse. Desbloquéalo en su botón inferior (<strong>⚠️ Tropezó</strong>) para arrastrarlo.</span>`;
+    renderAll();
+    return;
+  }
+
+  if (t.floor !== STATE.currentFloor && t.inStairs) {
+    const entry = getTokenRenderCoords(t, STATE.currentFloor);
+    t.floor = STATE.currentFloor;
+    t.x = entry.x;
+    t.y = entry.y;
+    t.roomId = entry.roomId;
+    const ro = getRoomById(STATE.currentFloor, entry.roomId);
+    if (ro) t.roomName = ro.name;
+  }
+
+  document.getElementById('map-stage').classList.add('dragging-now');
+  STATE.dragState = {
+    tokenId,
+    startX: t.x,
+    startY: t.y,
+    startRoom: t.roomId,
+    hitWall: false,
+    closedDoorName: null
+  };
+  renderSquadBar();
 }
 
 const vp = document.getElementById('map-viewport');
 
 vp.addEventListener('mousedown', e => {
-  if (e.target.closest('.char-token-svg')) return;
+  if (e.target.closest('.char-token-svg') || e.target.closest('.door-interactive')) return;
   isPanning = true;
   vp.classList.add('panning');
+  document.getElementById('map-stage').classList.add('dragging-now');
   startPanX = e.clientX - panX;
   startPanY = e.clientY - panY;
 });
 
 window.addEventListener('mousemove', e => {
-  if (STATE.dragState) { dragTo(e.clientX, e.clientY); return; }
+  if (STATE.dragState) {
+    const svgPt = clientToSVGCoords(e.clientX, e.clientY);
+    const t = STATE.tokens[STATE.dragState.tokenId];
+    if (t) {
+      const res = moveTokenWithCollision(t, svgPt.x, svgPt.y);
+      if (res.hitWall) STATE.dragState.hitWall = true;
+      if (res.closedDoorName) STATE.dragState.closedDoorName = res.closedDoorName;
+      STATE.selectedRoom = t.roomId;
+    }
+    renderBlueprintSVG();
+    return;
+  }
   if (!isPanning) return;
   panX = e.clientX - startPanX;
   panY = e.clientY - startPanY;
@@ -996,30 +1492,25 @@ window.addEventListener('mousemove', e => {
 });
 
 function finishTokenOrPan() {
+  document.getElementById('map-stage').classList.remove('dragging-now');
   if (STATE.dragState) {
     const ds = STATE.dragState;
-    const isChar = !!STATE.tokens[ds.tokenId];
-    const t = isChar ? STATE.tokens[ds.tokenId] : STATE.enemies[ds.tokenId];
-    const distPx = Math.hypot(ds.curX - ds.startX, ds.curY - ds.startY);
-    const distMeters = (distPx * 0.045).toFixed(1) + 'm';
-    const detected = detectRoomAt(t.x, t.y);
+    const t = STATE.tokens[ds.tokenId];
+    const distPx = Math.hypot(t.x - ds.startX, t.y - ds.startY);
+    const distMeters = (distPx * 0.04).toFixed(1) + 'm';
 
-    if (distPx < 4) {
-      // toque simple: abre la ficha de la sala donde está
-      if (detected && ROOMS[detected.id]) STATE.selectedRoom = detected.id;
-      STATE.dragState = null;
-      renderAll();
+    if (ds.closedDoorName && t.roomId === ds.startRoom) {
+      STATE.lastRollHtml = `<span style="color:#f87171;">🔒 <strong>${ds.closedDoorName} está CERRADA:</strong> Toca el ícono <strong>🔒</strong> sobre la puerta (o su botón en el inspector) para abrirla antes de cruzar.</span>`;
+    } else if (t.inStairs) {
+      STATE.lastRollHtml = `<span style="color:#38bdf8;">🪜 <strong>${t.name} [${t.id}]</strong> está en la <strong>${t.roomName}</strong>. Cambia de pestaña de piso arriba para verlo en el otro nivel.</span>`;
+    } else if (ds.hitWall && t.roomId === ds.startRoom) {
+      STATE.lastRollHtml = `<span style="color:#fbbf24;">🧱 <strong>Muro sólido 3D:</strong> Dirige a <strong>${t.name}</strong> hacia una puerta abierta (<strong>🔓</strong>).</span>`;
     } else {
-      if (isChar) {
-        if (detected && ROOMS[detected.id]) STATE.selectedRoom = detected.id;
-        STATE.lastTrail = { tokenId: ds.tokenId, x1: ds.startX, y1: ds.startY, x2: ds.curX, y2: ds.curY, distMeters };
-        STATE.lastRollHtml = `<span style="color:#34d399;">✋ Arrastraste a <strong>${t.name} [${t.id}]</strong> hasta <strong>${roomLabel(t)}</strong> (${distMeters}).</span>`;
-      } else {
-        STATE.lastRollHtml = `<span style="color:#f87171;">✋ Posición de <strong>${t.name}</strong> actualizada (${distMeters}).</span>`;
-      }
-      STATE.dragState = null;
-      renderAll();
+      STATE.lastRollHtml = `<span style="color:#34d399;">👣 <strong>${t.name} [${t.id}]</strong> se desplazó en <strong>${t.roomName}</strong> (${distMeters}).</span>`;
     }
+
+    STATE.dragState = null;
+    renderAll();
   }
   isPanning = false;
   initialPinchDist = null;
@@ -1029,10 +1520,14 @@ function finishTokenOrPan() {
 window.addEventListener('mouseup', finishTokenOrPan);
 
 vp.addEventListener('touchstart', e => {
-  if (e.target.closest('.char-token-svg')) return;
+  if (e.target.closest('.char-token-svg') || e.target.closest('.door-interactive')) return;
+  document.getElementById('map-stage').classList.add('dragging-now');
   if (e.touches.length === 2) {
     isPanning = false;
-    initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    initialPinchDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
     initialPinchZoom = STATE.zoom;
   } else if (e.touches.length === 1) {
     isPanning = true;
@@ -1044,13 +1539,25 @@ vp.addEventListener('touchstart', e => {
 window.addEventListener('touchmove', e => {
   if (STATE.dragState && e.touches[0]) {
     if (e.cancelable) e.preventDefault();
-    dragTo(e.touches[0].clientX, e.touches[0].clientY);
+    const touch = e.touches[0];
+    const svgPt = clientToSVGCoords(touch.clientX, touch.clientY);
+    const t = STATE.tokens[STATE.dragState.tokenId];
+    if (t) {
+      const res = moveTokenWithCollision(t, svgPt.x, svgPt.y);
+      if (res.hitWall) STATE.dragState.hitWall = true;
+      if (res.closedDoorName) STATE.dragState.closedDoorName = res.closedDoorName;
+      STATE.selectedRoom = t.roomId;
+    }
+    renderBlueprintSVG();
     return;
   }
   if (e.touches.length === 2 && initialPinchDist) {
     if (e.cancelable) e.preventDefault();
-    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-    STATE.zoom = Math.max(0.55, Math.min(2.4, initialPinchZoom * (dist / initialPinchDist)));
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    STATE.zoom = Math.max(0.6, Math.min(2.4, initialPinchZoom * (dist / initialPinchDist)));
     updateStageTransform();
     return;
   }
@@ -1062,9 +1569,5 @@ window.addEventListener('touchmove', e => {
 }, { passive: false });
 
 window.addEventListener('touchend', finishTokenOrPan);
-window.addEventListener('resize', renderBlueprintSVG);
 
-window.addEventListener('DOMContentLoaded', () => {
-  injectStyles();
-  renderAll();
-});
+window.addEventListener('DOMContentLoaded', renderAll);
