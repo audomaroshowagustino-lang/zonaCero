@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>ZONA CERO — Plano Arquitectónico Táctico Interactivo (Responsivo)</title>
+<title>ZONA CERO — Mapa Táctico 3D Renderizado</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -14,45 +14,55 @@
       <div style="display:flex;align-items:center;gap:8px;min-width:0;">
         <span class="title-badge">ZONA CERO</span>
         <div style="min-width:0;">
-          <div class="blueprint-title">PLANO ARQUITECTÓNICO • TÁCTIL Y RESPONSIVO</div>
-          <div class="blueprint-sub">Arrastra cada ficha (AU, AR, GZ, Z1) con el dedo o mouse de forma independiente</div>
+          <div class="blueprint-title">MAPA TÁCTICO 3D • PUERTAS INTERACTIVAS Y FIGURAS FIELES</div>
+          <div class="blueprint-sub">Toca cualquier puerta (🔒/🔓) para abrirla o cerrarla • Arrastra las miniaturas de cada personaje</div>
         </div>
       </div>
 
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
         <div class="noise-strip" title="Medidor de Ruido (0 a 6)">
-          <span style="color:var(--text-dim);font-weight:700;font-size:10px;">RUIDO</span>
+          <span style="color:var(--text-dim);font-weight:700;font-size:9.5px;">RUIDO</span>
           <div id="noise-pips" style="display:flex;gap:2px;"></div>
-          <span id="noise-txt" style="font-weight:800;font-size:10.5px;">0/6</span>
+          <span id="noise-txt" style="font-weight:800;font-size:10px;">0/6</span>
         </div>
-        <button class="hud-btn" id="gm-btn" onclick="toggleFOW()">👁️ Niebla</button>
+        <button class="hud-btn" id="iso-btn" onclick="toggleIsoView()" title="Alternar cámara 3D isométrica">🧊 Cámara 3D</button>
+        <button class="hud-btn" id="fog-btn" onclick="toggleFog()" title="Alternar Niebla de Guerra">👁️ Niebla</button>
         <button class="hud-btn" onclick="zoomBy(1.18)" title="Acercar">＋</button>
         <button class="hud-btn" onclick="zoomBy(0.84)" title="Alejar">－</button>
         <button class="hud-btn" onclick="resetCamera()" title="Centrar">⌖</button>
       </div>
     </div>
 
-    <div class="hud-group floor-switcher">
-      <button class="floor-pill active" id="btn-view-all" onclick="switchView('all')">🏢 3 NIVELES</button>
-      <button class="floor-pill" id="btn-view-p4" onclick="switchView('p4')">PISO 4 (INICIO)</button>
-      <button class="floor-pill" id="btn-view-stairs" onclick="switchView('stairs')">ESCALERA (P3–P2)</button>
-      <button class="floor-pill" id="btn-view-pb" onclick="switchView('pb')">PLANTA BAJA</button>
+    <!-- FLOOR TABS -->
+    <div class="hud-group floor-switcher" id="floor-tabs-bar">
+      <button class="floor-pill active" id="tab-p4" onclick="switchFloorTab('p4')">
+        <span>PISO 4 (SUITES)</span>
+        <span class="floor-count-badge" id="badge-p4">3</span>
+      </button>
+      <button class="floor-pill" id="tab-p2" onclick="switchFloorTab('p2')">
+        <span>PISOS 3–2 (ESCALERA)</span>
+        <span class="floor-count-badge" id="badge-p2" style="display:none;">0</span>
+      </button>
+      <button class="floor-pill" id="tab-pb" onclick="switchFloorTab('pb')">
+        <span>PLANTA BAJA (MUELLE Y PATIO)</span>
+        <span class="floor-count-badge" id="badge-pb" style="display:none;">0</span>
+      </button>
     </div>
   </header>
 
-  <!-- FULL SCREEN ARCHITECTURAL BLUEPRINT CANVAS -->
+  <!-- SINGLE-FLOOR 3D BATTLEMAP CANVAS -->
   <div id="map-viewport">
     <div id="map-stage"></div>
   </div>
 
-  <!-- FLOATING SQUAD TOKENS (INDIVIDUAL SELECTION & STATUS) -->
+  <!-- FLOATING SQUAD TOKENS -->
   <div class="hud-bottom-left" id="squad-bar"></div>
 
   <!-- FLOATING / BOTTOM-SHEET ROOM & DICE DRAWER -->
   <aside class="context-drawer" id="context-drawer">
     <div class="drawer-drag-handle" onclick="toggleDrawer()"></div>
     <div class="drawer-header" onclick="toggleDrawer()">
-      <span class="drawer-title" id="drawer-title">📍 Inspector de Habitación</span>
+      <span class="drawer-title" id="drawer-title">📍 Inspector de Sector</span>
       <span style="font-family:var(--font-mono);font-size:10.5px;color:var(--accent-cyan);white-space:nowrap;" id="drawer-toggle-lbl">[Minimizar ▼]</span>
     </div>
     <div id="drawer-body"></div>
